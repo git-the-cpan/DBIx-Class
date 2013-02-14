@@ -223,7 +223,7 @@ metadata. Currently the supplied coderef is executed as:
     foreign_alias     => The alias of the to-be-joined resultset (often matches relname),
     self_resultsource => The invocant's resultsource,
     foreign_relname   => The relationship name (does *not* always match foreign_alias),
-    self_rowobj       => The invocant itself in case of $row_obj->relationship
+    self_rowobj       => The invocant itself in case of a $result_object->$relationship call
   });
 
 =head3 attributes
@@ -428,7 +428,7 @@ $rel_name.
   $rs = $cd->related_resultset('tracks');           # has_many relationship
   $rs = $cd->tracks;
 
-This is the recommended way to transverse through relationships, based
+This is the recommended way to traverse through relationships, based
 on the L</accessor> name given in the relationship definition.
 
 This will return either a L<Result|DBIx::Class::Manual::ResultClass> or a
@@ -445,7 +445,7 @@ sub related_resultset {
     unless ref $self;
   my $rel = shift;
   my $rel_info = $self->relationship_info($rel);
-  $self->throw_exception( "No such relationship ${rel}" )
+  $self->throw_exception( "No such relationship '$rel'" )
     unless $rel_info;
 
   return $self->{related_resultsets}{$rel} ||= do {
@@ -474,8 +474,8 @@ sub related_resultset {
     # keep in mind that the following if() block is part of a do{} - no return()s!!!
     if ($is_crosstable) {
       $self->throw_exception (
-        "A cross-table relationship condition returned for statically declared '$rel'")
-          unless ref $rel_info->{cond} eq 'CODE';
+        "A cross-table relationship condition returned for statically declared '$rel'"
+      ) unless ref $rel_info->{cond} eq 'CODE';
 
       # A WHOREIFFIC hack to reinvoke the entire condition resolution
       # with the correct alias. Another way of doing this involves a
@@ -587,8 +587,7 @@ current result or where conditions.
 =cut
 
 sub count_related {
-  my $self = shift;
-  return $self->search_related(@_)->count;
+  shift->search_related(@_)->count;
 }
 
 =head2 new_related
@@ -671,7 +670,7 @@ sub create_related {
 
 =over 4
 
-=item Arguments: $rel_name, \%col_data | @pk_values, { key => $unique_constraint, L<%attrs?|DBIx::Class::ResultSet/ATTRIBUTES> }?
+=item Arguments: $rel_name, \%col_data | @pk_values, { key => $unique_constraint, L<%attrs|DBIx::Class::ResultSet/ATTRIBUTES> }?
 
 =item Return Value: L<$result|DBIx::Class::Manual::ResultClass> | undef
 
@@ -685,16 +684,15 @@ See L<DBIx::Class::ResultSet/find> for details.
 =cut
 
 sub find_related {
-  my $self = shift;
-  my $rel = shift;
-  return $self->search_related($rel)->find(@_);
+  #my ($self, $rel, @args) = @_;
+  return shift->search_related(shift)->find(@_);
 }
 
 =head2 find_or_new_related
 
 =over 4
 
-=item Arguments: $rel_name, \%col_data, { key => $unique_constraint, L<%attrs?|DBIx::Class::ResultSet/ATTRIBUTES> }?
+=item Arguments: $rel_name, \%col_data, { key => $unique_constraint, L<%attrs|DBIx::Class::ResultSet/ATTRIBUTES> }?
 
 =item Return Value: L<$result|DBIx::Class::Manual::ResultClass>
 
@@ -715,7 +713,7 @@ sub find_or_new_related {
 
 =over 4
 
-=item Arguments: $rel_name, \%col_data, { key => $unique_constraint, L<%attrs?|DBIx::Class::ResultSet/ATTRIBUTES> }?
+=item Arguments: $rel_name, \%col_data, { key => $unique_constraint, L<%attrs|DBIx::Class::ResultSet/ATTRIBUTES> }?
 
 =item Return Value: L<$result|DBIx::Class::Manual::ResultClass>
 
@@ -736,7 +734,7 @@ sub find_or_create_related {
 
 =over 4
 
-=item Arguments: $rel_name, \%col_data, { key => $unique_constraint, L<%attrs?|DBIx::Class::ResultSet/ATTRIBUTES> }?
+=item Arguments: $rel_name, \%col_data, { key => $unique_constraint, L<%attrs|DBIx::Class::ResultSet/ATTRIBUTES> }?
 
 =item Return Value: L<$result|DBIx::Class::Manual::ResultClass>
 
@@ -748,9 +746,8 @@ L<DBIx::Class::ResultSet/update_or_create> for details.
 =cut
 
 sub update_or_create_related {
-  my $self = shift;
-  my $rel = shift;
-  return $self->related_resultset($rel)->update_or_create(@_);
+  #my ($self, $rel, @args) = @_;
+  shift->related_resultset(shift)->update_or_create(@_);
 }
 
 =head2 set_from_related
@@ -784,11 +781,11 @@ sub set_from_related {
 
   my $rsrc = $self->result_source;
   my $rel_info = $rsrc->relationship_info($rel)
-    or $self->throw_exception( "No such relationship ${rel}" );
+    or $self->throw_exception( "No such relationship '$rel'" );
 
   if (defined $f_obj) {
     my $f_class = $rel_info->{class};
-    $self->throw_exception( "Object $f_obj isn't a ".$f_class )
+    $self->throw_exception( "Object '$f_obj' isn't a ".$f_class )
       unless blessed $f_obj and $f_obj->isa($f_class);
   }
 
@@ -845,7 +842,7 @@ sub update_from_related {
 
 =item Arguments: $rel_name, $cond?, L<\%attrs?|DBIx::Class::ResultSet/ATTRIBUTES>
 
-=item Return Value: L<$storage_rv|DBIx::Class::Storage>
+=item Return Value: $underlying_storage_rv
 
 =back
 
@@ -918,7 +915,7 @@ B<Currently only available for C<many_to_many> relationships.>
 
 =over 4
 
-=item Arguments: (\@hashrefs_of_col_data | L<@result_objs|DBIx::Class::Manual::ResultClass>), $link_vals?
+=item Arguments: (\@hashrefs_of_col_data | L<\@result_objs|DBIx::Class::Manual::ResultClass>), $link_vals?
 
 =item Return Value: not defined
 

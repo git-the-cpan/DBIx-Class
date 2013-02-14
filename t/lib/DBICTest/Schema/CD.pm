@@ -1,6 +1,9 @@
 package # hide from PAUSE
     DBICTest::Schema::CD;
 
+use warnings;
+use strict;
+
 use base qw/DBICTest::BaseResult/;
 
 # this tests table name as scalar ref
@@ -49,6 +52,9 @@ __PACKAGE__->belongs_to( very_long_artist_relationship => 'DBICTest::Schema::Art
 __PACKAGE__->belongs_to( single_track => 'DBICTest::Schema::Track', 'single_track',
     { join_type => 'left'}
 );
+
+# add a non-left single relationship for the complex prefetch tests
+__PACKAGE__->belongs_to( existing_single_track => 'DBICTest::Schema::Track', 'single_track');
 
 __PACKAGE__->has_many( tracks => 'DBICTest::Schema::Track' );
 __PACKAGE__->has_many(

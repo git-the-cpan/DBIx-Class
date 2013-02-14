@@ -3,7 +3,7 @@ use strict;
 
 use Test::More;
 use List::Util 'first';
-use lib qw(t/lib .generated_pod);
+use lib qw(t/lib maint/.Generated_Pod/lib);
 use DBICTest;
 use namespace::clean;
 
@@ -14,6 +14,9 @@ unless ( DBIx::Class::Optional::Dependencies->req_ok_for ('test_podcoverage') ) 
     ? die ("Failed to load release-testing module requirements: $missing")
     : plan skip_all => "Test needs: $missing"
 }
+
+# this has already been required but leave it here for CPANTS static analysis
+require Test::Pod::Coverage;
 
 # Since this is about checking documentation, a little documentation
 # of what this is doing might be in order.
@@ -45,11 +48,6 @@ my $exceptions = {
     'DBIx::Class::Row' => {
         ignore => [qw/
             MULTICREATE_DEBUG
-        /],
-    },
-    'DBIx::Class::Storage::TxnScopeGuard' => {
-        ignore => [qw/
-            IS_BROKEN_PERL
         /],
     },
     'DBIx::Class::FilterColumn' => {

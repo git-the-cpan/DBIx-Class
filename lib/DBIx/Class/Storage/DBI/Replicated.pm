@@ -332,8 +332,6 @@ my $method_dispatch = {
     _arm_global_destructor
     _verify_pid
 
-    source_bind_attributes
-
     get_use_dbms_capability
     set_use_dbms_capability
     get_dbms_capability
@@ -400,7 +398,7 @@ if (DBIx::Class::_ENV_::DBICTEST) {
 for my $method (@{$method_dispatch->{unimplemented}}) {
   __PACKAGE__->meta->add_method($method, sub {
     my $self = shift;
-    $self->throw_exception("$method must not be called on ".(blessed $self).' objects');
+    $self->throw_exception("$method() must not be called on ".(blessed $self).' objects');
   });
 }
 

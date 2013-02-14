@@ -3,7 +3,6 @@ package DBIx::Class::Schema;
 use strict;
 use warnings;
 
-use DBIx::Class::Exception;
 use DBIx::Class::Carp;
 use Try::Tiny;
 use Scalar::Util qw/weaken blessed/;
@@ -618,8 +617,7 @@ Retrieves the Result class name for the given source name.
 =cut
 
 sub class {
-  my ($self, $source_name) = @_;
-  return $self->source($source_name)->result_class;
+  return shift->source(shift)->result_class;
 }
 
 =head2 txn_do
@@ -738,59 +736,42 @@ found in L<DBIx::Class::Storage::DBI>.
 
 =over 4
 
-=item Arguments: L<$source_name|DBIx::Class::ResultSource/source_name>, \@data;
+=item Arguments: L<$source_name|DBIx::Class::ResultSource/source_name>, [ \@column_list, \@row_values+ ] | [ \%col_data+ ]
 
-=item Return Value: L<\@$results|DBIx::Class::Manual::ResultClass> | undef
+=item Return Value: L<\@result_objects|DBIx::Class::Manual::ResultClass> (scalar context) | L<@result_objects|DBIx::Class::Manual::ResultClass> (list context)
 
 =back
 
-Pass this method a resultsource name, and an arrayref of
-arrayrefs. The arrayrefs should contain a list of column names,
-followed by one or many sets of matching data for the given columns.
+A convenience shortcut to L<DBIx::Class::ResultSet/populate>. Equivalent to:
 
-In void context, C<insert_bulk> in L<DBIx::Class::Storage::DBI> is used
-to insert the data, as this is a fast method. However, insert_bulk currently
-assumes that your datasets all contain the same type of values, using scalar
-references in a column in one row, and not in another will probably not work.
+ $schema->resultset($source_name)->populate([...]);
 
-Otherwise, each set of data is inserted into the database using
-L<DBIx::Class::ResultSet/create>, and an arrayref of the Result
-objects is returned.
+=over 4
 
-e.g.
+=item NOTE
 
-  $schema->populate('Artist', [
-    [ qw/artistid name/ ],
-    [ 1, 'Popular Band' ],
-    [ 2, 'Indie Band' ],
-    ...
-  ]);
+The context of this method call has an important effect on what is
+submitted to storage. In void context data is fed directly to fastpath
+insertion routines provided by the underlying storage (most often
+L<DBI/execute_for_fetch>), bypassing the L<new|DBIx::Class::Row/new> and
+L<insert|DBIx::Class::Row/insert> calls on the
+L<Result|DBIx::Class::Manual::ResultClass> class, including any
+augmentation of these methods provided by components. For example if you
+are using something like L<DBIx::Class::UUIDColumns> to create primary
+keys for you, you will find that your PKs are empty.  In this case you
+will have to explicitly force scalar or list context in order to create
+those values.
 
-Since wantarray context is basically the same as looping over $rs->create(...)
-you won't see any performance benefits and in this case the method is more for
-convenience. Void context sends the column information directly to storage
-using <DBI>s bulk insert method. So the performance will be much better for
-storages that support this method.
-
-Because of this difference in the way void context inserts rows into your
-database you need to note how this will effect any loaded components that
-override or augment insert.  For example if you are using a component such
-as L<DBIx::Class::UUIDColumns> to populate your primary keys you MUST use
-wantarray context if you want the PKs automatically created.
+=back
 
 =cut
 
 sub populate {
   my ($self, $name, $data) = @_;
-  if(my $rs = $self->resultset($name)) {
-    if(defined wantarray) {
-        return $rs->populate($data);
-    } else {
-        $rs->populate($data);
-    }
-  } else {
-      $self->throw_exception("$name is not a resultset");
-  }
+  my $rs = $self->resultset($name)
+    or $self->throw_exception("'$name' is not a resultset");
+
+  return $rs->populate($data);
 }
 
 =head2 connection
@@ -1076,7 +1057,6 @@ default behavior will provide a detailed stack trace.
 
 =cut
 
-my $false_exception_action_warned;
 sub throw_exception {
   my $self = shift;
 
@@ -1089,13 +1069,12 @@ sub throw_exception {
         ." (original error: $_[0])"
       );
     }
-    elsif(! $false_exception_action_warned++) {
-      carp (
-          "The exception_action handler installed on $self returned false instead"
-        .' of throwing an exception. This behavior has been deprecated, adjust your'
-        .' handler to always rethrow the supplied error.'
-      );
-    }
+
+    carp_unique (
+      "The exception_action handler installed on $self returned false instead"
+    .' of throwing an exception. This behavior has been deprecated, adjust your'
+    .' handler to always rethrow the supplied error.'
+    );
   }
 
   DBIx::Class::Exception->throw($_[0], $self->stacktrace);

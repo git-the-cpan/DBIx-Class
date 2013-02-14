@@ -11,7 +11,7 @@ our $VERSION;
 # $VERSION declaration must stay up here, ahead of any other package
 # declarations, as to not confuse various modules attempting to determine
 # this ones version, whether that be s.c.o. or Module::Metadata, etc
-$VERSION = '0.08204_01';
+$VERSION = '0.08240';
 
 $VERSION = eval $VERSION if $VERSION =~ /_/; # numify for warning-free dev releases
 
@@ -40,10 +40,6 @@ BEGIN {
       # otherwise we are good
                                                                                     : 0
     ,
-
-    # There was a brief period of p5p insanity when $@ was invisible in a DESTROY
-    INVISIBLE_DOLLAR_AT => ($] >= 5.013001 and $] <= 5.013007) ? 1 : 0,
-
   };
 
   if ($] < 5.009_005) {
@@ -62,6 +58,7 @@ use DBIx::Class::Optional::Dependencies;
 
 use base qw/DBIx::Class::Componentised DBIx::Class::AccessorGroup/;
 use DBIx::Class::StartupCheck;
+use DBIx::Class::Exception;
 
 __PACKAGE__->mk_group_accessors(inherited => '_skip_namespace_frames');
 __PACKAGE__->_skip_namespace_frames('^DBIx::Class|^SQL::Abstract|^Try::Tiny|^Class::Accessor::Grouped|^Context::Preserve');
@@ -306,6 +303,8 @@ amiri: Amiri Barksdale <amiri@metalabel.com>
 
 amoore: Andrew Moore <amoore@cpan.org>
 
+andrewalker: Andre Walker <andre@andrewalker.net>
+
 andyg: Andy Grundman <andy@hybridized.org>
 
 ank: Andres Kievsky
@@ -396,6 +395,8 @@ jguenther: Justin Guenther <jguenther@cpan.org>
 
 jhannah: Jay Hannah <jay@jays.net>
 
+jmac: Jason McIntosh <jmac@appleseed-sc.com>
+
 jnapiorkowski: John Napiorkowski <jjn1056@yahoo.com>
 
 jon: Jon Schutz <jjschutz@cpan.org>
@@ -478,7 +479,7 @@ robkinyon: Rob Kinyon <rkinyon@cpan.org>
 
 Robert Olson <bob@rdolson.org>
 
-Roman: Roman Filippov <romanf@cpan.org>
+moltar: Roman Filippov <romanf@cpan.org>
 
 Sadrak: Felix Antonius Wilhelm Ostmann <sadrak@cpan.org>
 

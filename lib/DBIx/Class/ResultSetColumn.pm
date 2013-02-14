@@ -5,7 +5,6 @@ use warnings;
 
 use base 'DBIx::Class';
 use DBIx::Class::Carp;
-use DBIx::Class::Exception;
 
 # not importing first() as it will clash with our own method
 use List::Util ();
@@ -94,7 +93,7 @@ sub new {
 
   # {collapse} would mean a has_many join was injected, which in turn means
   # we need to group *IF WE CAN* (only if the column in question is unique)
-  if (!$orig_attrs->{group_by} && keys %{$orig_attrs->{collapse}}) {
+  if (!$orig_attrs->{group_by} && $orig_attrs->{collapse}) {
 
     if ($colmap->{$select} and $rsrc->_identifying_column_set([$colmap->{$select}])) {
       $new_attrs->{group_by} = [ $select ];
@@ -438,7 +437,7 @@ See L<DBIx::Class::Schema/throw_exception> for details.
 =cut
 
 sub throw_exception {
-  my $self=shift;
+  my $self = shift;
 
   if (ref $self && $self->{_parent_resultset}) {
     $self->{_parent_resultset}->throw_exception(@_);

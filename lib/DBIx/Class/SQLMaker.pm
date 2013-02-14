@@ -40,7 +40,6 @@ use mro 'c3';
 
 use Sub::Name 'subname';
 use DBIx::Class::Carp;
-use DBIx::Class::Exception;
 use namespace::clean;
 
 __PACKAGE__->mk_group_accessors (simple => qw/quote_char name_sep limit_dialect/);
@@ -71,9 +70,6 @@ BEGIN {
     my($func) = (caller(1))[3];
     __PACKAGE__->throw_exception("[$func] Fatal: " . join ('',  @_));
   };
-
-  # Current SQLA pollutes its namespace - clean for the time being
-  namespace::clean->clean_subroutines(qw/SQL::Abstract carp croak confess/);
 }
 
 # the "oh noes offset/top without limit" constant
@@ -133,16 +129,25 @@ sub select {
 
     ($sql, @bind) = $self->next::method ($table, $fields, $where);
 
-    my $limiter =
-      $self->can ('emulate_limit')  # also backcompat hook from SQLA::Limit
-        ||
-      do {
-        my $dialect = $self->limit_dialect
-          or $self->throw_exception( "Unable to generate SQL-limit - no limit dialect specified on $self, and no emulate_limit method found" );
-        $self->can ("_$dialect")
-          or $self->throw_exception(__PACKAGE__ . " does not implement the requested dialect '$dialect'");
-      }
-    ;
+    my $limiter;
+
+    if( $limiter = $self->can ('emulate_limit') ) {
+      carp_unique(
+        'Support for the legacy emulate_limit() mechanism inherited from '
+      . 'SQL::Abstract::Limit has been deprecated, and will be removed when '
+      . 'DBIC transitions to Data::Query. If your code uses this type of '
+      . 'limit specification please file an RT and provide the source of '
+      . 'your emulate_limit() implementation, so an acceptable upgrade-path '
+      . 'can be devised'
+      );
+    }
+    else {
+      my $dialect = $self->limit_dialect
+        or $self->throw_exception( "Unable to generate SQL-limit - no limit dialect specified on $self" );
+
+      $limiter = $self->can ("_$dialect")
+        or $self->throw_exception(__PACKAGE__ . " does not implement the requested dialect '$dialect'");
+    }
 
     $sql = $self->$limiter (
       $sql,
@@ -447,6 +452,55 @@ sub _join_condition {
   }
 
   return $self->_recurse_where($cond);
+}
+
+# This is hideously ugly, but SQLA does not understand multicol IN expressions
+# FIXME TEMPORARY - DQ should have native syntax for this
+# moved here to raise API questions
+#
+# !!! EXPERIMENTAL API !!! WILL CHANGE !!!
+sub _where_op_multicolumn_in {
+  my ($self, $lhs, $rhs) = @_;
+
+  if (! ref $lhs or ref $lhs eq 'ARRAY') {
+    my (@sql, @bind);
+    for (ref $lhs ? @$lhs : $lhs) {
+      if (! ref $_) {
+        push @sql, $self->_quote($_);
+      }
+      elsif (ref $_ eq 'SCALAR') {
+        push @sql, $$_;
+      }
+      elsif (ref $_ eq 'REF' and ref $$_ eq 'ARRAY') {
+        my ($s, @b) = @$$_;
+        push @sql, $s;
+        push @bind, @b;
+      }
+      else {
+        $self->throw_exception("ARRAY of @{[ ref $_ ]}es unsupported for multicolumn IN lhs...");
+      }
+    }
+    $lhs = \[ join(', ', @sql), @bind];
+  }
+  elsif (ref $lhs eq 'SCALAR') {
+    $lhs = \[ $$lhs ];
+  }
+  elsif (ref $lhs eq 'REF' and ref $$lhs eq 'ARRAY' ) {
+    # noop
+  }
+  else {
+    $self->throw_exception( ref($lhs) . "es unsupported for multicolumn IN lhs...");
+  }
+
+  # is this proper...?
+  $rhs = \[ $self->_recurse_where($rhs) ];
+
+  for ($lhs, $rhs) {
+    $$_->[0] = "( $$_->[0] )"
+      unless $$_->[0] =~ /^ \s* \( .* \) \s* ^/xs;
+  }
+
+  \[ join( ' IN ', shift @$$lhs, shift @$$rhs ), @$$lhs, @$$rhs ];
 }
 
 1;

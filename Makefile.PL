@@ -12,6 +12,7 @@ use inc::Module::Install 1.06;
 # for that)
 BEGIN {
   $Module::Install::AUTHOR = 0 if (grep { $ENV{"PERL5_${_}_IS_RUNNING"} } (qw/CPANM CPANPLUS CPAN/) );
+  makemaker_args( NORECURS => 1 );
 }
 
 homepage 'http://www.dbix-class.org/';
@@ -34,16 +35,14 @@ install_script (qw|
     script/dbicadmin
 |);
 
-makemaker_args(
-  PMLIBDIRS => [qw(lib .generated_pod)],
-  PMLIBPARENTDIRS => [qw(lib .generated_pod)],
-);
-
 ###
 ### DO NOT ADD OPTIONAL DEPENDENCIES HERE, EVEN AS recommends()
 ### All of them *MUST* go to DBIx::Class::Optional::Dependencies
 ###
 my $runtime_requires = {
+  # FIXME - temporary workaround for RT#83143 (Path::Class)
+  'File::Spec'               => '3.30',
+
   # FIXME - temporary, needs throwing out for something more efficient
   'Data::Compare'            => '1.22',
 
@@ -51,6 +50,13 @@ my $runtime_requires = {
   # mode. However it has never been tested yet, so consider XS for the time
   # being
   'DBI'                      => '1.57',
+
+  # on older versions first() leaks
+  # for the time being make it a hard dep - when we get
+  # rid of Sub::Name will revisit this (possibility is
+  # to use Devel::HideXS to force the pure-perl version
+  # or something like that)
+  'List::Util'               => '1.16',
 
   # XS (or XS-dependent) libs
   'Sub::Name'                => '0.04',
@@ -73,6 +79,11 @@ my $runtime_requires = {
   'Scope::Guard'             => '0.03',
   'SQL::Abstract'            => '1.73',
   'Try::Tiny'                => '0.07',
+
+  # Technically this is not a core dependency - it is only required
+  # by the MySQL codepath. However this particular version is bundled
+  # since 5.10.0 and is a pure-perl module anyway - let it slide
+  'Text::Balanced'           => '2.00',
 };
 
 my $build_requires = {
@@ -144,9 +155,30 @@ if ($Module::Install::AUTHOR  and ! $ENV{MAKELEVEL}) {
     warn "\nIgnoring unrecognized option(s): @ARGV\n\n";
   }
 
+  # We need the MM facilities to generate the pieces for the final MM run.
+  # Just instantiate a throaway object here
+  my $mm_proto = ExtUtils::MakeMaker->new({
+    NORECURS => 1,
+    NAME => Meta->name || die 'The Module::Install metadata must be available at this point but is not - did you rearrange the Makefile.PL...?',
+  });
+
+  # Crutch for DISTBUILDING_IN_HELL
+  # Spits back a working dos2unix snippet to be used on the supplied path(s)
+  # Ironically EUMM's dos2unix is broken on win32 itself - it does
+  # not take into account the CRLF layer present on win32
+  my $crlf_fixup = sub {
+    return '' unless ($^O eq 'MSWin32' or $^O eq 'cygwin');
+    my $targets = join ', ', map { "q($_)" } @_;
+    "\t" . $mm_proto->oneliner( qq(\$ENV{PERLIO}='unix' and system( \$^X, qw( -MExtUtils::Command -e dos2unix -- ), $targets ) ) );
+  };
+
+  # we are in the process of (re)writing the makefile - some things we
+  # call below very well may fail
+  local $ENV{DBICTEST_NO_MAKEFILE_VERIFICATION} = 1;
+
   require File::Spec;
   # string-eval, not do(), because we need to provide the
-  # $reqs and $*_requires lexicals to the included file
+  # $mm_proto, $reqs and $*_requires lexicals to the included file
   # (some includes *do* modify $reqs above)
   for my $inc (sort glob ( File::Spec->catfile('maint', 'Makefile.PL.inc', '*') ) ) {
     my $src = do { local (@ARGV, $/) = $inc; <> } or die $!;
@@ -161,7 +193,6 @@ else {
   # make sure this Makefile can not be used to make a dist
   # (without the author includes there are no meta cleanup, no sanity checks, etc)
   postamble <<EOP;
-.PHONY: nonauthor_stop_distdir_creation
 create_distdir: nonauthor_stop_distdir_creation
 nonauthor_stop_distdir_creation:
 \t\$(NOECHO) \$(ECHO) Creation of dists in non-author mode is not allowed

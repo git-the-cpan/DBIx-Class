@@ -106,11 +106,11 @@ my $rdbms_firebird_odbc = {
 };
 
 my $reqs = {
-  dist => {
-    req => { $] < '5.010001' ? () : (
-      'Pod::Inherit' => '0.16',
+  dist_podinherit => {
+    req => {
+      'Pod::Inherit' => '0.90',
       'Pod::Tree'    => '0',
-    ) },
+    }
   },
 
   replicated => {
@@ -149,16 +149,9 @@ my $reqs = {
     },
   },
 
-  test_admin_script => {
-    req => {
-      %$admin_script,
-      ($^O eq 'MSWin32' ? ('Win32::ShellQuote' => 0) : ()),
-    }
-  },
-
   deploy => {
     req => {
-      'SQL::Translator'           => '0.11006',
+      'SQL::Translator'           => '0.11016',
     },
     pod => {
       title => 'Storage::DBI::deploy()',
@@ -189,20 +182,35 @@ my $reqs = {
     },
   },
 
-  test_notabs => {
+  test_whitespace => {
     req => {
+      'Test::EOL'                 => '1.0',
       'Test::NoTabs'              => '0.9',
     },
   },
 
-  test_eol => {
+  test_strictures => {
     req => {
-      'Test::EOL'                 => '1.0',
+      'Test::Strict'              => '0.16',
     },
   },
 
   test_prettydebug => {
     req => $json_any,
+  },
+
+  test_admin_script => {
+    req => {
+      %$admin_script,
+      'JSON' => 0,
+      'JSON::XS' => 0,
+      $^O eq 'MSWin32'
+        # for t/admin/10script.t
+        ? ('Win32::ShellQuote' => 0)
+        # DWIW does not compile (./configure even) on win32
+        : ('JSON::DWIW' => 0 )
+      ,
+    }
   },
 
   test_leaks => {

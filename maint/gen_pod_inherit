@@ -4,16 +4,30 @@ use warnings;
 use strict;
 
 my $lib_dir = 'lib';
-my $pod_dir = '.generated_pod';
+my $pod_dir = 'maint/.Generated_Pod';
+
+my $result_metapod_fn = "$lib_dir/DBIx/Class/Manual/ResultClass.pod";
 
 die "POD generator must be executed from the dist root\n"
   unless -d $lib_dir and -d $pod_dir;
+
+require File::Copy;
+File::Copy::copy(
+  "$result_metapod_fn.proto",
+  "$result_metapod_fn",
+) or die "Copying ResultClass proto pod ($result_metapod_fn) failed: $!";
+
+# cleanup
+END {
+  local ($@, $!, $?);
+  unlink $result_metapod_fn;
+}
 
 require Pod::Inherit;
 
 Pod::Inherit->new({
    input_files       => $lib_dir,
-   out_dir           => $pod_dir,
+   out_dir           => "$pod_dir/lib",
    force_permissions => 1,
    class_map         => {
       "DBIx::Class::Relationship::HasMany"    => "DBIx::Class::Relationship",

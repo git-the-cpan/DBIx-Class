@@ -32,6 +32,7 @@ no_index:
     - xt
   package:
     - DBIx::Class::Storage::DBIHacks
+    - DBIx::Class::Storage::BlockRunner
     - DBIx::Class::Carp
     - DBIx::Class::ResultSet::Pager
 requires:
@@ -45,7 +46,9 @@ requires:
   Data::Dumper::Concise: 2.020
   Data::Page: 2.00
   Devel::GlobalDestruction: 0.09
+  File::Spec: 3.30
   Hash::Merge: 0.12
+  List::Util: 1.16
   MRO::Compat: 0.12
   Module::Find: 0.07
   Moo: 1.000006
@@ -53,6 +56,7 @@ requires:
   SQL::Abstract: 1.73
   Scope::Guard: 0.03
   Sub::Name: 0.04
+  Text::Balanced: 2.00
   Try::Tiny: 0.07
   namespace::clean: 0.24
   perl: 5.8.1
@@ -63,5 +67,5 @@ resources:
   homepage: http://www.dbix-class.org/
   license: http://dev.perl.org/licenses/
   repository: https://github.com/dbsrgits/DBIx-Class
-version: 0.08204_01
+version: 0.08240
 x_authority: cpan:RIBASUSHI
