@@ -1,16 +1,8 @@
 Revision history for DBIx::Class
 
-0.082810 2014-10-25 13:58 (UTC)
-    * Fixes
-        - Fix incorrect collapsing-parser source being generated in the
-          presence of unicode data among the collapse-points
-        - Fix endless loop on BareSourcelessResultClass->throw_exception(...)
-
+0.082899_01 !!! EARLY ALPHA TEST OF t/00describe-environment !!! 2015-03-04 01:35 (UTC)
     * Misc
-        - Depend on newer SQL::Abstract (fixing overly-aggressive parenthesis
-          opener: RT#99503)
-        - Depend on newer Moo, fixing some interoperability issues:
-          http://lists.scsys.co.uk/pipermail/dbix-class/2014-October/011787.html
+        - things
 
 0.082801 2014-10-05 23:55 (UTC)
     * Known Issues

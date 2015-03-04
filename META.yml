@@ -52,7 +52,7 @@ requires:
   List::Util: 1.16
   MRO::Compat: 0.12
   Module::Find: 0.07
-  Moo: 1.006001
+  Moo: 2.000
   Path::Class: 0.18
   SQL::Abstract: 1.81
   Scope::Guard: 0.03
@@ -68,7 +68,7 @@ resources:
   homepage: http://www.dbix-class.org/
   license: http://dev.perl.org/licenses/
   repository: https://github.com/dbsrgits/DBIx-Class
-version: 0.082810
+version: 0.082899_01
 x_authority: cpan:RIBASUSHI
 x_contributors:
   - 'abraxxa: Alexander Hartmaier <abraxxa@cpan.org>'
@@ -161,6 +161,7 @@ x_contributors:
   - 'jshirley: J. Shirley <jshirley@gmail.com>'
   - 'kaare: Kaare Rasmussen'
   - 'kd: Kieren Diment <diment@gmail.com>'
+  - 'kkane: Kevin L. Kane <kevin.kane@gmail.com>'
   - 'konobi: Scott McWhirter <konobi@cpan.org>'
   - 'lejeunerenard: Sean Zellmer <sean@lejeunerenard.com>'
   - 'littlesavage: Alexey Illarionov <littlesavage@orionet.ru>'

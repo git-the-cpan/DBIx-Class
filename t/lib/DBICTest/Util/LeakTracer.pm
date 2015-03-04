@@ -8,10 +8,9 @@ use Scalar::Util qw(isweak weaken blessed reftype);
 use DBIx::Class::_Util qw(refcount hrefaddr refdesc);
 use DBIx::Class::Optional::Dependencies;
 use Data::Dumper::Concise;
-use DBICTest::Util 'stacktrace';
+use DBICTest::Util qw( stacktrace visit_namespaces );
 use constant {
   CV_TRACING => DBIx::Class::Optional::Dependencies->req_ok_for ('test_leaks_heavy'),
-  SKIP_SCALAR_REFS => ( $] > 5.017 ) ? 1 : 0,
 };
 
 use base 'Exporter';
@@ -43,17 +42,17 @@ sub populate_weakregistry {
       for keys %$reg;
   }
 
-  # FIXME/INVESTIGATE - something fishy is going on with refs to plain
-  # strings, perhaps something to do with the CoW work etc...
-  return $target if SKIP_SCALAR_REFS and reftype($target) eq 'SCALAR';
-
   if (! defined $weak_registry->{$refaddr}{weakref}) {
     $weak_registry->{$refaddr} = {
       stacktrace => stacktrace(1),
       weakref => $target,
     };
-    weaken( $weak_registry->{$refaddr}{weakref} );
-    $refs_traced++;
+
+    # on perl < 5.8.3 sometimes a weaken can throw (can't find RT)
+    # so guard against that unlikely event
+    local $@;
+    eval { weaken( $weak_registry->{$refaddr}{weakref} ); $refs_traced++ }
+      or delete $weak_registry->{$refaddr};
   }
 
   my $desc = refdesc $target;
@@ -141,36 +140,12 @@ sub visit_refs {
       elsif (CV_TRACING and $type eq 'CODE') {
         $visited_cnt += visit_refs({ %$args, refs => [ map {
           ( !isweak($_) ) ? $_ : ()
-        } scalar PadWalker::closed_over($r) ] }); # scalar due to RT#92269
+        } values %{ scalar PadWalker::closed_over($r) } ] }); # scalar due to RT#92269
       }
       1;
     } or warn "Could not descend into @{[ refdesc $r ]}: $@\n";
   }
   $visited_cnt;
-}
-
-sub visit_namespaces {
-  my $args = { (ref $_[0]) ? %{$_[0]} : @_ };
-
-  my $visited = 1;
-
-  $args->{package} ||= '::';
-  $args->{package} = '::' if $args->{package} eq 'main';
-
-  if ( $args->{action}->($args->{package}) ) {
-
-    my $base = $args->{package};
-    $base = '' if $base eq '::';
-
-
-    $visited += visit_namespaces({ %$args, package => $_ }) for map
-      { $_ =~ /(.+?)::$/ ? "${base}::$1" : () }
-      grep
-        { $_ =~ /(?<!^main)::$/ }
-        do {  no strict 'refs'; keys %{ $base . '::'} }
-  }
-
-  return $visited;
 }
 
 # compiles a list of addresses stored as globals (possibly even catching
@@ -179,8 +154,6 @@ sub symtable_referenced_addresses {
 
   my $refs_per_pkg;
 
-  my $dummy_addresslist;
-
   my $seen_refs = {};
   visit_namespaces(
     action => sub {
@@ -188,41 +161,32 @@ sub symtable_referenced_addresses {
       no strict 'refs';
 
       my $pkg = shift;
-      $pkg = '' if $pkg eq '::';
-      $pkg .= '::';
 
       # the unless regex at the end skips some dangerous namespaces outright
       # (but does not prevent descent)
       $refs_per_pkg->{$pkg} += visit_refs (
         seen_refs => $seen_refs,
 
-        # FIXME FIXME FIXME
-        # This is so damn odd - if we feed a constsub {1} (or in fact almost
-        # anything other than the actionsub below, any scalarref will show
-        # up as a leak, trapped by... something...
-        # Ideally we should be able to const this to sub{1} and just return
-        # $seen_refs (in fact it is identical to the dummy list at the end of
-        # a run here). Alas this doesn't seem to work, so punt for now...
-        action => sub { ++$dummy_addresslist->{ hrefaddr $_[0] } },
+        action => sub { 1 },
 
         refs => [ map { my $sym = $_;
-          # *{"$pkg$sym"}{CODE} won't simply work - MRO-cached CVs are invisible there
-          ( CV_TRACING ? Class::MethodCache::get_cv("${pkg}$sym") : () ),
+          # *{"${pkg}::$sym"}{CODE} won't simply work - MRO-cached CVs are invisible there
+          ( CV_TRACING ? Class::MethodCache::get_cv("${pkg}::$sym") : () ),
 
-          ( defined *{"$pkg$sym"}{SCALAR} and length ref ${"$pkg$sym"} and ! isweak( ${"$pkg$sym"} ) )
-            ? ${"$pkg$sym"} : ()
+          ( defined *{"${pkg}::$sym"}{SCALAR} and length ref ${"${pkg}::$sym"} and ! isweak( ${"${pkg}::$sym"} ) )
+            ? ${"${pkg}::$sym"} : ()
           ,
 
           ( map {
-            ( defined *{"$pkg$sym"}{$_} and ! isweak(defined *{"$pkg$sym"}{$_}) )
-              ? *{"$pkg$sym"}{$_}
+            ( defined *{"${pkg}::$sym"}{$_} and ! isweak(defined *{"${pkg}::$sym"}{$_}) )
+              ? *{"${pkg}::$sym"}{$_}
               : ()
           } qw(HASH ARRAY IO GLOB) ),
 
-        } keys %$pkg ],
-      ) unless $pkg =~ /^ :: (?:
+        } keys %{"${pkg}::"} ],
+      ) unless $pkg =~ /^ (?:
         DB | next | B | .+? ::::ISA (?: ::CACHE ) | Class::C3
-      ) :: $/x;
+      ) $/x;
     }
   );
 
@@ -366,20 +330,23 @@ END {
       $tb->note("Auto checked $refs_traced references for leaks - none detected");
     }
 
-# Disable this until better times - SQLT and probably other things
-# still load strictures. Let's just wait until Moo2.0 and go from there
-=begin for tears
     # also while we are here and not in plain runmode: make sure we never
     # loaded any of the strictures XS bullshit (it's a leak in a sense)
-    unless (DBICTest::RunMode->is_plain) {
+    unless (
+      $ENV{MOO_FATAL_WARNINGS}
+        or
+      # FIXME - SQLT loads strictures explicitly, /facedesk
+      # remove this INC check when 0fb58589 and 45287c815 are rectified
+      $INC{'SQL/Translator.pm'}
+        or
+      DBICTest::RunMode->is_plain
+    ) {
       for (qw(indirect multidimensional bareword::filehandles)) {
         exists $INC{ Module::Runtime::module_notional_filename($_) }
           and
         $tb->ok(0, "$_ load should not have been attempted!!!" )
       }
     }
-=cut
-
   }
 }
 

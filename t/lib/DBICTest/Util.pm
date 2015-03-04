@@ -17,31 +17,12 @@ BEGIN {
   }
 }
 
-use Module::Runtime 'module_notional_filename';
-BEGIN {
-  for my $mod (qw( SQL::Abstract::Test SQL::Abstract )) {
-    if ( $INC{ module_notional_filename($mod) } ) {
-      # FIXME this does not seem to work in BEGIN - why?!
-      #require Carp;
-      #$Carp::Internal{ (__PACKAGE__) }++;
-      #Carp::croak( __PACKAGE__ . " must be loaded before $mod" );
-
-      my ($fr, @frame) = 1;
-      while (@frame = caller($fr++)) {
-        last if $frame[1] !~ m|^t/lib/DBICTest|;
-      }
-
-      die __PACKAGE__ . " must be loaded before $mod (or modules using $mod) at $frame[1] line $frame[2]\n";
-    }
-  }
-}
-
 use Config;
 use Carp 'confess';
 use Scalar::Util qw(blessed refaddr);
 
 use base 'Exporter';
-our @EXPORT_OK = qw(local_umask stacktrace check_customcond_args);
+our @EXPORT_OK = qw(local_umask stacktrace check_customcond_args visit_namespaces);
 
 sub local_umask {
   return unless defined $Config{d_umask};
@@ -123,6 +104,36 @@ sub check_customcond_args ($) {
     if $struct_cnt == 2;
 
   $args;
+}
+
+sub visit_namespaces {
+  my $args = { (ref $_[0]) ? %{$_[0]} : @_ };
+
+  my $visited_count = 1;
+
+  # A package and a namespace are subtly different things
+  $args->{package} ||= 'main';
+  $args->{package} = 'main' if $args->{package} =~ /^ :: (?: main )? $/x;
+  $args->{package} =~ s/^:://;
+
+  if ( $args->{action}->($args->{package}) ) {
+    my $ns =
+      ( ($args->{package} eq 'main') ? '' :  $args->{package} )
+        .
+      '::'
+    ;
+
+    $visited_count += visit_namespaces( %$args, package => $_ ) for
+      grep
+        # this happens sometimes on %:: traversal
+        { $_ ne '::main' }
+        map
+          { $_ =~ /^(.+?)::$/ ? "$ns$1" : () }
+          do { no strict 'refs'; keys %$ns }
+    ;
+  }
+
+  return $visited_count;
 }
 
 1;

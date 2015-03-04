@@ -37,12 +37,6 @@ use Test::More;
 
 use lib 't/lib';
 
-BEGIN {
-  require DBICTest::RunMode;
-  plan( skip_all => "Skipping test on plain module install" )
-    if DBICTest::RunMode->is_plain;
-}
-
 use DBICTest;
 use File::Find;
 use File::Spec;
@@ -87,6 +81,7 @@ my $skip_idx = { map { $_ => 1 } (
   'DBIx::Class::ResultSet::Pager',
 
   # utility classes, not part of the inheritance chain
+  'DBIx::Class::Optional::Dependencies',
   'DBIx::Class::ResultSource::RowParser::Util',
   'DBIx::Class::_Util',
 ) };

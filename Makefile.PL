@@ -3,7 +3,13 @@ use warnings;
 
 use 5.008001;
 use inc::Module::Install 1.06;
-BEGIN { makemaker_args( NORECURS => 1 ) } # needs to happen early for old EUMM
+BEGIN {
+  # needs to happen early for old EUMM
+  makemaker_args( NORECURS => 1 );
+
+  local @INC = ('lib', @INC);
+  require DBIx::Class::Optional::Dependencies;
+}
 
 ##
 ## DO NOT USE THIS HACK IN YOUR DISTS!!! (it makes #toolchain sad)
@@ -56,7 +62,7 @@ my $runtime_requires = {
   'Data::Page'               => '2.00',
   'Devel::GlobalDestruction' => '0.09',
   'Hash::Merge'              => '0.12',
-  'Moo'                      => '1.006001',
+  'Moo'                      => '2.000',
   'MRO::Compat'              => '0.12',
   'Module::Find'             => '0.07',
   'namespace::clean'         => '0.24',
@@ -81,19 +87,13 @@ my $test_requires = {
   'Test::Warn'               => '0.21',
   'Test::More'               => '0.94',
 
-  # needed for testing only, not for operation
-  # we will move away from this dep eventually, perhaps to DBD::CSV or something
-###
-### IMPORTANT - do not raise this dependency
-### even though many bugfixes are present in newer versions, the general DBIC
-### rule is to bend over backwards for available DBDs (given upgrading them is
-### often *not* easy or even possible)
-###
-  'DBD::SQLite'              => '1.29',
-
   # this is already a dep of n::c, but just in case - used by t/55namespaces_cleaned.t
   # remove and do a manual glob-collection if n::c is no longer a dep
   'Package::Stash'           => '0.28',
+
+  # needed for testing only, not for operation
+  # we will move away from this dep eventually, perhaps to DBD::CSV or something
+  %{ DBIx::Class::Optional::Dependencies->req_list_for('test_rdbms_sqlite') },
 };
 
 # if the user has this env var set and no SQLT installed, tests will fail
@@ -107,17 +107,24 @@ my $test_requires = {
 # envvar *and* is not running a full Makefile/make/maketest cycle - they get
 # to keep the pieces
 if ($ENV{DBICTEST_SQLT_DEPLOY}) {
-  local @INC = ('lib', @INC);
-  require DBIx::Class::Optional::Dependencies;
-  my $dep_req = DBIx::Class::Optional::Dependencies->req_list_for('deploy');
-  for (keys %$dep_req) {
-    test_requires ($_ => $dep_req->{$_})
+  my $deploy_req = DBIx::Class::Optional::Dependencies->req_list_for('deploy');
+  for (keys %$deploy_req) {
+    test_requires ($_ => $deploy_req->{$_})
   }
 }
 
-tests_recursive (qw|
-    t
-|);
+tests_recursive (
+  't',
+  ( (
+    $Module::Install::AUTHOR
+      or
+    $ENV{DBICTEST_RUN_ALL_TESTS}
+      or
+    ( $ENV{TRAVIS}||'' ) eq 'true'
+      or
+    ( $ENV{AUTOMATED_TESTING} and ! $ENV{PERL5_CPANM_IS_RUNNING} and ! $ENV{RELEASE_TESTING} )
+  ) ? 'xt' : () ),
+);
 
 install_script (qw|
     script/dbicadmin

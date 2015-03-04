@@ -9,7 +9,7 @@ use Math::BigInt;
 
 use lib qw(t/lib);
 use DBICTest;
-use DBIx::Class::_Util qw(sigwarn_silencer modver_gt_or_eq);
+use DBIx::Class::_Util qw( sigwarn_silencer modver_gt_or_eq modver_gt_or_eq_and_lt );
 
 # check that we work somewhat OK with braindead SQLite transaction handling
 #
@@ -147,7 +147,7 @@ is ($row->rank, 'abc', 'proper rank inserted into database');
 SKIP: {
 
 skip "Not testing bigint handling on known broken DBD::SQLite trial versions", 1
-  if( modver_gt_or_eq('DBD::SQLite', '1.45') and ! modver_gt_or_eq('DBD::SQLite', '1.45_03') );
+  if modver_gt_or_eq_and_lt( 'DBD::SQLite', '1.45', '1.45_03' );
 
 {
   package DBICTest::BigIntArtist;
@@ -160,9 +160,7 @@ $schema->storage->dbh_do(sub {
   $_[1]->do('ALTER TABLE artist ADD COLUMN bigint BIGINT');
 });
 
-my $sqlite_broken_bigint = (
-  modver_gt_or_eq('DBD::SQLite', '1.34') and ! modver_gt_or_eq('DBD::SQLite', '1.37')
-);
+my $sqlite_broken_bigint = modver_gt_or_eq_and_lt( 'DBD::SQLite', '1.34', '1.37' );
 
 # 63 bit integer
 my $many_bits = (Math::BigInt->new(2) ** 62);
@@ -273,11 +271,6 @@ for my $bi ( qw(
     "value in database correct ($v_desc)"
   );
 
-# FIXME - temporary smoke-only escape
-SKIP: {
-  skip 'Potential for false negatives - investigation pending', 1
-    if DBICTest::RunMode->is_plain;
-
   # check if math works
   # start by adding/subtracting a 50 bit integer, and then divide by 2 for good measure
   my ($sqlop, $expect) = $bi < 0
@@ -311,8 +304,6 @@ SKIP: {
     , "simple integer math with@{[ $dtype ? '' : 'out' ]} bindtype in database correct (base $v_desc)")
       or diag sprintf '%s != %s', $row->bigint, $expect;
   }
-# end of fixme
-}
 
   is_deeply (\@w, [], "No mismatch warnings on bigint operations ($v_desc)" );
 
