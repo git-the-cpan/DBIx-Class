@@ -44,7 +44,7 @@ use lib qw(lib t/lib);
 use strict;
 use warnings;
 
-use Test::More;
+use Test::More 'no_plan';
 use Config;
 use File::Find 'find';
 use Module::Runtime 'module_notional_filename';
@@ -153,7 +153,11 @@ visit_namespaces( action => sub {
 
   no strict 'refs';
   # that would be some synthetic class, or a custom sub VERSION
-  return 1 unless defined ${"${pkg}::VERSION"};
+  return 1 if (
+    ! defined ${"${pkg}::VERSION"}
+      or
+    ${"${pkg}::VERSION"} =~ /\Qset by base.pm/
+  );
 
   # make sure a version can be extracted, be noisy when it doesn't work
   # do this even if we are throwing away the result below in lieu of EUMM
@@ -223,21 +227,28 @@ visit_namespaces( action => sub {
 });
 
 # compress identical versions as close to the root as we can
-for my $mod ( sort { length($b) <=> length($a) } keys %$version_list ) {
-  my $parent = $mod;
+# unless we are dealing with a smoker - in which case we want
+# to see every MD5 there is
+unless ( $ENV{AUTOMATED_TESTING} ) {
+  for my $mod ( sort { length($b) <=> length($a) } keys %$version_list ) {
+    my $parent = $mod;
 
-  while ( $parent =~ s/ :: (?: . (?! :: ) )+ $ //x ) {
-    $version_list->{$parent}
-      and
-    $version_list->{$parent} eq $version_list->{$mod}
-      and
-    ( ( delete $version_list->{$mod} ) or 1 )
-      and
-    last
+    while ( $parent =~ s/ :: (?: . (?! :: ) )+ $ //x ) {
+      $version_list->{$parent}
+        and
+      $version_list->{$parent} eq $version_list->{$mod}
+        and
+      ( ( delete $version_list->{$mod} ) or 1 )
+        and
+      last
+    }
   }
 }
 
 ok 1, (scalar keys %$version_list) . " distinctly versioned modules";
+
+# do not announce anything under ci - we are watching for STDERR silence
+exit if DBICTest::RunMode->is_ci;
 
 # sort stuff into @INC segments
 my $segments;
@@ -266,8 +277,8 @@ for my $mod ( sort { lc($a) cmp lc($b) } keys %$version_list ) {
 }
 
 # diag the result out
-my $max_ver = max map { length $_ } values %$version_list;
-my $max_mod = max map { length $_ } keys %$version_list;
+my $max_ver_len = max map { length $_ } values %$version_list;
+my $max_mod_len = max map { length $_ } keys %$version_list;
 
 my $diag = "\n\nVersions of all loadable modules within the configure/build/test/runtime dependency chains present on this system (both core and optional)\n\n";
 for my $seg ( '', @lib_display_order, './lib' ) {
@@ -281,9 +292,9 @@ for my $seg ( '', @lib_display_order, './lib' ) {
 
   $diag .= sprintf (
     "   %*s  %*s%s\n",
-    $max_ver => $version_list->{$_->[0]},
-    -$max_mod => $_->[0],
-    ( ( $ENV{AUTOMATED_TESTING} and $_->[1] )
+    $max_ver_len => $version_list->{$_->[0]},
+    -$max_mod_len => $_->[0],
+    ($_->[1]
       ? "  [ MD5: @{[ md5_of_fn( $_->[1] ) ]} ]"
       : ''
     ),
@@ -293,5 +304,3 @@ for my $seg ( '', @lib_display_order, './lib' ) {
 }
 
 diag $diag;
-
-done_testing;
