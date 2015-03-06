@@ -93,7 +93,7 @@ if (FIXUP_BACKSLASHES) {
 }
 
 sub describe_fn {
-  my $fn = shift;
+  my $fn = shift or return '';
 
   $fn =~ s|\\|/|g if FIXUP_BACKSLASHES;
 
@@ -140,7 +140,12 @@ req_mod $_ for sort
   { ($load_weights->{$b}||0) <=> ($load_weights->{$a}||0) }
   keys %{
     DBIx::Class::Optional::Dependencies->req_list_for([
-      keys %{DBIx::Class::Optional::Dependencies->req_group_list}
+      grep
+        # some DBDs are notoriously problematic to load
+        # hence only show stuff based on test_rdbms which will
+        # take into account necessary ENVs
+        { $_ !~ /^rdbms_/ }
+        keys %{DBIx::Class::Optional::Dependencies->req_group_list}
     ])
   }
 ;
@@ -151,16 +156,16 @@ my $has_versionpm = eval { require version };
 # the *ENTIRE* symtable and build a map of versions
 my $version_list = { perl => $] };
 visit_namespaces( action => sub {
+  no strict 'refs';
   my $pkg = shift;
 
   # keep going, but nothing to see here
   return 1 if $pkg eq 'main';
 
-  # private - not interested
+  # private - not interested, including no further descent
   return 0 if $pkg =~ / (?: ^ | :: ) _ /x;
 
-  no strict 'refs';
-  # that would be some synthetic class, or a custom sub VERSION
+  # not interested in no-VERSION-containing modules, nor synthetic classes
   return 1 if (
     ! defined ${"${pkg}::VERSION"}
       or
@@ -175,29 +180,36 @@ visit_namespaces( action => sub {
     say_err
       "Calling `$pkg->VERSION` resulted in an exception, which should never "
     . "happen - please file a bug with the distribution containing $pkg. "
-    . "Follows the full text of the exception:\n\n$err\n"
+    . "Complete exception text below:\n\n$err"
     ;
   }
-  elsif( ! defined $mod_ver ) {
-    say_err
-      "Calling `$pkg->VERSION` returned 'undef', which should never "
-    . "happen - please file a bug with the distribution containing $pkg."
+  elsif( ! defined $mod_ver or ! length $mod_ver ) {
+    my $ret = defined $mod_ver
+      ? "the empty string ''"
+      : "'undef'"
     ;
 
-  }
-  elsif( ! length $mod_ver ) {
     say_err
-      "Calling `$pkg->VERSION` returned the empty string '', which should never "
-    . "happen - please file a bug with the distribution containing $pkg."
+      "Calling `$pkg->VERSION` returned $ret, even though \$${pkg}::VERSION "
+    . "is defined, which should never happen - please file a bug with the "
+    . "distribution containing $pkg."
     ;
+
     undef $mod_ver;
   }
 
   # if this is a real file - extract the version via EUMM whenever possible
   my $fn = $INC{module_notional_filename($pkg)};
 
-  my $eumm_ver = eval { MM->parse_version( $fn ) }
-    if $fn and  -f $fn and -r $fn;
+  my $eumm_ver = (
+    $fn
+      and
+    -f $fn
+      and
+    -r $fn
+      and
+    eval { MM->parse_version( $fn ) }
+  ) || undef;
 
   if (
     $has_versionpm
@@ -235,8 +247,8 @@ visit_namespaces( action => sub {
 });
 
 # In retrospect it makes little sense to omit this information - just
-# show everything at all times. Leave the dead code in, in case it turns
-# out to be a bad idea...
+# show everything at all times.
+# Nevertheless leave the dead code, in case it turns out to be a bad idea...
 my $show_all = 1;
 #my $show_all = $ENV{PERL_DESCRIBE_ALL_DEPS} || !DBICTest::RunMode->is_plain;
 
@@ -270,7 +282,8 @@ my $segments;
 MODULE:
 for my $mod ( sort { lc($a) cmp lc($b) } keys %$version_list ) {
   my $fn = $INC{module_notional_filename($mod)};
-  $fn =~ s|\\|/|g if FIXUP_BACKSLASHES;
+
+  $fn =~ s|\\|/|g if FIXUP_BACKSLASHES and $fn;
 
   my $tuple = [
     $mod,
@@ -298,9 +311,16 @@ my $max_ver_len = max map
 ;
 my $max_mod_len = max map { length $_ } keys %$version_list;
 
-diag "\n\nVersions of all loadable modules within the configure/build/test/runtime dependency chains present on this system (both core and optional)\n";
-diag "(modules with versions identical to their parent namespace were omitted - set PERL_DESCRIBE_ALL_DEPS to see them)\n"
+my $discl = <<'EOD';
+
+Versions of all loadable modules within both the core and *OPTIONAL* dependency chains present on this system
+Note that *MANY* of these modules will *NEVER* be loaded during normal operation of DBIx::Class
+EOD
+
+$discl .= "(modules with versions identical to their parent namespace were omitted - set PERL_DESCRIBE_ALL_DEPS to see them)\n"
   unless $show_all;
+
+diag $discl;
 
 diag "\n";
 
@@ -310,7 +330,7 @@ for my $seg ( '', @lib_display_order, './lib' ) {
   diag sprintf "=== %s ===\n\n",
     $seg
       ? "Modules found in " . ( $Config{$seg} ? "\$Config{$seg}" : $seg )
-      : 'Misc'
+      : 'Misc versions'
   ;
 
   diag sprintf (
@@ -318,10 +338,12 @@ for my $seg ( '', @lib_display_order, './lib' ) {
     $max_ver_len => $version_list->{$_->[0]},
     -$max_mod_len => $_->[0],
     ($_->[1]
-      ? ' ' x (80 - min(78, $max_mod_len)) . "MD5: @{[ md5_of_fn( $_->[1] ) ]}"
+      ? ' ' x (80 - min(78, $max_mod_len)) . "[ MD5: @{[ md5_of_fn( $_->[1] ) ]} ]"
       : ''
     ),
   ) for @{$segments->{$seg}};
 
   diag "\n\n"
 }
+
+diag "$discl\n";
