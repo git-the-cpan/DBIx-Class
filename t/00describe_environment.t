@@ -48,8 +48,9 @@ use Test::More 'no_plan';
 use Config;
 use File::Find 'find';
 use Module::Runtime 'module_notional_filename';
-use List::Util 'max';
+use List::Util qw(max min);
 use ExtUtils::MakeMaker;
+use constant FIXUP_BACKSLASHES => ($^O eq 'MSWin32') ? 1 : 0;
 use DBICTest::Util 'visit_namespaces';
 
 # load these two to pull in the t/lib armada
@@ -86,8 +87,15 @@ my $lib_paths = {
   './lib' => 'lib',
 };
 
+# Fixup (native) slashes in Config not matching (unixy) slashes in INC
+if (FIXUP_BACKSLASHES) {
+  $_ =~ s|\\|/|g for values %$lib_paths;
+}
+
 sub describe_fn {
   my $fn = shift;
+
+  $fn =~ s|\\|/|g if FIXUP_BACKSLASHES;
 
   $lib_paths->{$_} and $fn =~ s/^\Q$lib_paths->{$_}/<<$_>>/ and last
     for @lib_display_order;
@@ -226,10 +234,16 @@ visit_namespaces( action => sub {
   1;
 });
 
+# In retrospect it makes little sense to omit this information - just
+# show everything at all times. Leave the dead code in, in case it turns
+# out to be a bad idea...
+my $show_all = 1;
+#my $show_all = $ENV{PERL_DESCRIBE_ALL_DEPS} || !DBICTest::RunMode->is_plain;
+
 # compress identical versions as close to the root as we can
 # unless we are dealing with a smoker - in which case we want
 # to see every MD5 there is
-unless ( $ENV{AUTOMATED_TESTING} ) {
+unless ($show_all) {
   for my $mod ( sort { length($b) <=> length($a) } keys %$version_list ) {
     my $parent = $mod;
 
@@ -256,6 +270,7 @@ my $segments;
 MODULE:
 for my $mod ( sort { lc($a) cmp lc($b) } keys %$version_list ) {
   my $fn = $INC{module_notional_filename($mod)};
+  $fn =~ s|\\|/|g if FIXUP_BACKSLASHES;
 
   my $tuple = [
     $mod,
@@ -277,30 +292,36 @@ for my $mod ( sort { lc($a) cmp lc($b) } keys %$version_list ) {
 }
 
 # diag the result out
-my $max_ver_len = max map { length $_ } values %$version_list;
+my $max_ver_len = max map
+  { length $_ }
+  ( values %$version_list, 'xxx.yyyzzz_bbb' )
+;
 my $max_mod_len = max map { length $_ } keys %$version_list;
 
-my $diag = "\n\nVersions of all loadable modules within the configure/build/test/runtime dependency chains present on this system (both core and optional)\n\n";
+diag "\n\nVersions of all loadable modules within the configure/build/test/runtime dependency chains present on this system (both core and optional)\n";
+diag "(modules with versions identical to their parent namespace were omitted - set PERL_DESCRIBE_ALL_DEPS to see them)\n"
+  unless $show_all;
+
+diag "\n";
+
 for my $seg ( '', @lib_display_order, './lib' ) {
   next unless $segments->{$seg};
 
-  $diag .= sprintf "=== %s ===\n\n",
+  diag sprintf "=== %s ===\n\n",
     $seg
       ? "Modules found in " . ( $Config{$seg} ? "\$Config{$seg}" : $seg )
       : 'Misc'
   ;
 
-  $diag .= sprintf (
-    "   %*s  %*s%s\n",
+  diag sprintf (
+    "%*s  %*s%s\n",
     $max_ver_len => $version_list->{$_->[0]},
     -$max_mod_len => $_->[0],
     ($_->[1]
-      ? "  [ MD5: @{[ md5_of_fn( $_->[1] ) ]} ]"
+      ? ' ' x (80 - min(78, $max_mod_len)) . "MD5: @{[ md5_of_fn( $_->[1] ) ]}"
       : ''
     ),
   ) for @{$segments->{$seg}};
 
-  $diag .= "\n\n"
+  diag "\n\n"
 }
-
-diag $diag;
