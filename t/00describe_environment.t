@@ -50,7 +50,6 @@ use File::Find 'find';
 use Module::Runtime 'module_notional_filename';
 use List::Util qw(max min);
 use ExtUtils::MakeMaker;
-use constant FIXUP_BACKSLASHES => ($^O eq 'MSWin32') ? 1 : 0;
 use DBICTest::Util 'visit_namespaces';
 
 # load these two to pull in the t/lib armada
@@ -69,6 +68,19 @@ sub say_err {
   print STDERR "\n", @_, "\n";
 }
 
+# needed for WeirdOS
+sub fixup_path ($) {
+  return $_[0] unless ( $^O eq 'MSWin32' and $_[0] );
+
+  # sometimes we can get a short/longname mix, normalize everything to longnames
+  my $fn = Win32::GetLongPathName($_[0]);
+
+  # Fixup (native) slashes in Config not matching (unixy) slashes in INC
+  $fn =~ s|\\|/|g;
+
+  $fn;
+}
+
 my @lib_display_order = qw(
   sitearch
   sitelib
@@ -79,7 +91,10 @@ my @lib_display_order = qw(
 );
 my $lib_paths = {
   (map
-    { $Config{$_} ? ( $_ => $Config{"${_}exp"} || $Config{$_} ) : () }
+    { $Config{$_}
+      ? ( $_ => fixup_path( $Config{"${_}exp"} || $Config{$_} ) )
+      : ()
+    }
     @lib_display_order
   ),
 
@@ -87,15 +102,12 @@ my $lib_paths = {
   './lib' => 'lib',
 };
 
-# Fixup (native) slashes in Config not matching (unixy) slashes in INC
-if (FIXUP_BACKSLASHES) {
-  $_ =~ s|\\|/|g for values %$lib_paths;
-}
-
 sub describe_fn {
-  my $fn = shift or return '';
+  my $fn = shift;
 
-  $fn =~ s|\\|/|g if FIXUP_BACKSLASHES;
+  return '' if !defined $fn;
+
+  $fn = fixup_path( $fn );
 
   $lib_paths->{$_} and $fn =~ s/^\Q$lib_paths->{$_}/<<$_>>/ and last
     for @lib_display_order;
@@ -283,15 +295,11 @@ MODULE:
 for my $mod ( sort { lc($a) cmp lc($b) } keys %$version_list ) {
   my $fn = $INC{module_notional_filename($mod)};
 
-  $fn =~ s|\\|/|g if FIXUP_BACKSLASHES and $fn;
+  my $tuple = [ $mod ];
 
-  my $tuple = [
-    $mod,
-    ( ( $fn && -f $fn && -r $fn ) ? $fn : undef )
-  ];
+  if ( defined $fn && -f $fn && -r $fn ) {
+    push @$tuple, ( $fn = fixup_path($fn) );
 
-
-  if ($fn) {
     for my $lib (@lib_display_order, './lib') {
       if ( $lib_paths->{$lib} and index($fn, $lib_paths->{$lib}) == 0 ) {
         push @{$segments->{$lib}}, $tuple;
