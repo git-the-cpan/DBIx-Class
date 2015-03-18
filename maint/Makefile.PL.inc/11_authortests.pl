@@ -1,15 +1,18 @@
 require File::Spec;
 require File::Find;
 
-my $xt_dist_dirs;
+my $xt_dirs;
 File::Find::find(sub {
-  return if $xt_dist_dirs->{$File::Find::dir};
-  $xt_dist_dirs->{$File::Find::dir} = 1 if (
+  return if $xt_dirs->{$File::Find::dir};
+  $xt_dirs->{$File::Find::dir} = 1 if (
     $_ =~ /\.t$/ and -f $_
   );
-}, 'xt/dist');
+}, 'xt');
 
-my @xt_dist_tests = map { File::Spec->catfile($_, '*.t') } sort keys %$xt_dist_dirs;
+my @xt_tests = map { File::Spec->catfile($_, '*.t') } sort keys %$xt_dirs;
+
+# this will add the xt tests to the `make test` target among other things
+Meta->tests(join (' ', map { $_ || () } @xt_tests, Meta->tests ) );
 
 # inject an explicit xt test run, mainly to check the contents of
 # lib and the generated POD's *before* anything is copied around
@@ -35,7 +38,7 @@ test_xt : pm_to_blib
     ),
     # test list
     join( ' ',
-      map { $mm_proto->quote_literal($_) } @xt_dist_tests
+      map { $mm_proto->quote_literal($_) } @xt_tests
     ),
   )
 ]}
@@ -52,7 +55,7 @@ dbic_distdir_retest_ws_and_footers :
         '$(ABSPERLRUN)',
         map { $mm_proto->quote_literal($_) } qw(-Ilib -e $ENV{RELEASE_TESTING}=1;$ENV{DBICTEST_NO_MAKEFILE_VERIFICATION}=1;)
       ),
-      'xt/dist/postdistdir/*.t',
+      'xt/whitespace.t xt/footers.t',
     )
   )
 ]}

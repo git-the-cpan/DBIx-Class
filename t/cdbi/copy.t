@@ -1,11 +1,10 @@
-use DBIx::Class::Optional::Dependencies -skip_all_without => 'cdbicompat';
-
 use strict;
 use warnings;
-
 use Test::More;
 
-use lib 't/cdbi/testlib';
+INIT {
+    use lib 't/cdbi/testlib';
+}
 
 {
     package # hide from PAUSE

@@ -1,8 +1,5 @@
-use DBIx::Class::Optional::Dependencies -skip_all_without => 'cdbicompat';
-
 use strict;
 use warnings;
-
 use Test::More;
 use Test::Warn;
 
@@ -89,8 +86,11 @@ warning_is {
 
 # Emulate that Class::DBI inflates immediately
 SKIP: {
-    DBIx::Class::Optional::Dependencies->skip_without([qw( Date::Simple>=3.03 test_rdbms_mysql )]);
-    require MyFoo;
+    unless (eval { require MyFoo }) {
+      my ($err) = $@ =~ /([^\n]+)/;
+      skip $err, 3
+    }
+
     my $foo = MyFoo->insert({
         name    => 'Whatever',
         tdate   => '1949-02-01',

@@ -4,10 +4,11 @@ use strict;
 use warnings;
 
 BEGIN {
-  require DBIx::Class::Optional::Dependencies;
-  if (my $missing = DBIx::Class::Optional::Dependencies->req_missing_for ('admin_script') ) {
-    die "The following modules are required for the dbicadmin utility: $missing\n";
-  }
+  use DBIx::Class;
+  die (  'The following modules are required for the dbicadmin utility: '
+       . DBIx::Class::Optional::Dependencies->req_missing_for ('admin_script')
+       . "\n"
+  ) unless DBIx::Class::Optional::Dependencies->req_ok_for ('admin_script');
 }
 
 use DBIx::Class::Admin::Descriptive;

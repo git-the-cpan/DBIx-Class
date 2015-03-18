@@ -1,13 +1,9 @@
 package DBIx::Class::Storage::DBI::Replicated;
 
-use warnings;
-use strict;
-
 BEGIN {
-  require DBIx::Class::Optional::Dependencies;
-  if ( my $missing = DBIx::Class::Optional::Dependencies->req_missing_for('replicated') ) {
-    die "The following modules are required for Replicated storage support: $missing\n";
-  }
+  use DBIx::Class;
+  die('The following modules are required for Replication ' . DBIx::Class::Optional::Dependencies->req_missing_for ('replicated') . "\n" )
+    unless DBIx::Class::Optional::Dependencies->req_ok_for ('replicated');
 }
 
 use Moose;
@@ -311,6 +307,7 @@ my $method_dispatch = {
     _parse_connect_do
     savepoints
     _sql_maker_opts
+    _use_multicolumn_in
     _conn_pid
     _dbh_autocommit
     _native_data_type
@@ -367,7 +364,7 @@ my $method_dispatch = {
     # the capability framework
     # not sure if CMOP->initialize does evil things to DBIC::S::DBI, fix if a problem
     grep
-      { $_ =~ /^ _ (?: use | supports | determine_supports ) _ /x }
+      { $_ =~ /^ _ (?: use | supports | determine_supports ) _ /x and $_ ne '_use_multicolumn_in' }
       ( Class::MOP::Class->initialize('DBIx::Class::Storage::DBI')->get_all_method_names )
   )],
 };

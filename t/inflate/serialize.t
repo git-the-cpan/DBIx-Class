@@ -28,6 +28,8 @@ foreach my $serializer (@serializers) {
     }
 }
 
+plan (skip_all => "No suitable serializer found") unless $selected;
+
 DBICTest::Schema::Serialized->inflate_column( 'serialized',
     { inflate => $selected->{inflater},
       deflate => $selected->{deflater},

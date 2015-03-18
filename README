@@ -204,7 +204,7 @@ AUTHORS
     questions and suggestions have been shown to catalyze monumental
     improvements in consistency, accuracy and performance.
 
-    List of the awesome contributors who made DBIC v0.082899_06 possible
+    List of the awesome contributors who made DBIC v0.082819_01 possible
 
         abraxxa: Alexander Hartmaier <abraxxa@cpan.org>
 
@@ -577,6 +577,8 @@ AUTHORS
         uree: Oriol Soriano <oriol.soriano@capside.com>
 
         uwe: Uwe Voelker <uwe@uwevoelker.de>
+
+        vanstyn: Henry Van Styn <vanstyn@cpan.org>
 
         victori: Victor Igumnov <victori@cpan.org>
 

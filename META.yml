@@ -68,7 +68,7 @@ resources:
   homepage: http://www.dbix-class.org/
   license: http://dev.perl.org/licenses/
   repository: https://github.com/dbsrgits/DBIx-Class
-version: 0.082899_06
+version: 0.082819_01
 x_authority: cpan:RIBASUSHI
 x_contributors:
   - 'abraxxa: Alexander Hartmaier <abraxxa@cpan.org>'
@@ -257,6 +257,7 @@ x_contributors:
   - 'typester: Daisuke Murase <typester@cpan.org>'
   - 'uree: Oriol Soriano <oriol.soriano@capside.com>'
   - 'uwe: Uwe Voelker <uwe@uwevoelker.de>'
+  - 'vanstyn: Henry Van Styn <vanstyn@cpan.org>'
   - 'victori: Victor Igumnov <victori@cpan.org>'
   - 'wdh: Will Hawes <wdhawes@gmail.com>'
   - 'wesm: Wes Malone <wes@mitsi.com>'

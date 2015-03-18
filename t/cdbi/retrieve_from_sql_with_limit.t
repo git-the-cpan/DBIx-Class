@@ -1,12 +1,11 @@
-use DBIx::Class::Optional::Dependencies -skip_all_without => 'cdbicompat';
-
 use strict;
 use warnings;
-
 use Test::More;
 
-use lib 't/cdbi/testlib';
-use Film;
+INIT {
+    use lib 't/cdbi/testlib';
+    use Film;
+}
 
 for my $title ("Bad Taste", "Braindead", "Forgotten Silver") {
     Film->insert({ Title => $title, Director => 'Peter Jackson' });

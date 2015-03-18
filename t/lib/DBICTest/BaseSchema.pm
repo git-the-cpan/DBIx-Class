@@ -257,10 +257,7 @@ sub clone {
 }
 
 END {
-  # Make sure we run after any cleanup in other END blocks
-  push @{ B::end_av()->object_2svref }, sub {
-    assert_empty_weakregistry($weak_registry, 'quiet');
-  };
+  assert_empty_weakregistry($weak_registry, 'quiet');
 }
 
 1;

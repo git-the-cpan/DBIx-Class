@@ -1,4 +1,4 @@
-use DBIx::Class::Optional::Dependencies -skip_all_without => 'deploy';
+#!/usr/bin/perl
 
 use strict;
 use warnings;
@@ -10,6 +10,15 @@ use lib qw(t/lib);
 use DBICTest;
 use ViewDeps;
 use ViewDepsBad;
+
+BEGIN {
+    require DBIx::Class;
+    plan skip_all => 'Test needs ' .
+        DBIx::Class::Optional::Dependencies->req_missing_for('deploy')
+      unless DBIx::Class::Optional::Dependencies->req_ok_for('deploy');
+}
+
+use_ok('DBIx::Class::ResultSource::View');
 
 #################### SANITY
 

@@ -48,13 +48,14 @@ use Test::More 'no_plan';
 use Config;
 use File::Find 'find';
 use Module::Runtime 'module_notional_filename';
-use List::Util qw(max min);
+use List::Util 'max';
 use ExtUtils::MakeMaker;
 use DBICTest::Util 'visit_namespaces';
 
 # load these two to pull in the t/lib armada
 use DBICTest;
 use DBICTest::Schema;
+DBICTest->init_schema;
 
 # do !!!NOT!!! use Module::Runtime's require_module - it breaks CORE::require
 sub req_mod ($) {
@@ -68,19 +69,6 @@ sub say_err {
   print STDERR "\n", @_, "\n";
 }
 
-# needed for WeirdOS
-sub fixup_path ($) {
-  return $_[0] unless ( $^O eq 'MSWin32' and $_[0] );
-
-  # sometimes we can get a short/longname mix, normalize everything to longnames
-  my $fn = Win32::GetLongPathName($_[0]);
-
-  # Fixup (native) slashes in Config not matching (unixy) slashes in INC
-  $fn =~ s|\\|/|g;
-
-  $fn;
-}
-
 my @lib_display_order = qw(
   sitearch
   sitelib
@@ -91,10 +79,7 @@ my @lib_display_order = qw(
 );
 my $lib_paths = {
   (map
-    { $Config{$_}
-      ? ( $_ => fixup_path( $Config{"${_}exp"} || $Config{$_} ) )
-      : ()
-    }
+    { $Config{$_} ? ( $_ => $Config{"${_}exp"} || $Config{$_} ) : () }
     @lib_display_order
   ),
 
@@ -104,10 +89,6 @@ my $lib_paths = {
 
 sub describe_fn {
   my $fn = shift;
-
-  return '' if !defined $fn;
-
-  $fn = fixup_path( $fn );
 
   $lib_paths->{$_} and $fn =~ s/^\Q$lib_paths->{$_}/<<$_>>/ and last
     for @lib_display_order;
@@ -148,18 +129,19 @@ my $load_weights = {
   # clashes with libssl, and will segfault everything coming after them
   "DBD::Oracle" => -999,
 };
+
+my $optdeps = {
+  map
+    { $_ => 1 }
+    map
+      { keys %{DBIx::Class::Optional::Dependencies->req_list_for($_)} }
+      grep
+        { $_ !~ /rdbms/ }
+        keys %{DBIx::Class::Optional::Dependencies->req_group_list}
+};
 req_mod $_ for sort
   { ($load_weights->{$b}||0) <=> ($load_weights->{$a}||0) }
-  keys %{
-    DBIx::Class::Optional::Dependencies->req_list_for([
-      grep
-        # some DBDs are notoriously problematic to load
-        # hence only show stuff based on test_rdbms which will
-        # take into account necessary ENVs
-        { $_ !~ /^rdbms_/ }
-        keys %{DBIx::Class::Optional::Dependencies->req_group_list}
-    ])
-  }
+  keys %$optdeps
 ;
 
 my $has_versionpm = eval { require version };
@@ -168,16 +150,16 @@ my $has_versionpm = eval { require version };
 # the *ENTIRE* symtable and build a map of versions
 my $version_list = { perl => $] };
 visit_namespaces( action => sub {
-  no strict 'refs';
   my $pkg = shift;
 
   # keep going, but nothing to see here
   return 1 if $pkg eq 'main';
 
-  # private - not interested, including no further descent
+  # private - not interested
   return 0 if $pkg =~ / (?: ^ | :: ) _ /x;
 
-  # not interested in no-VERSION-containing modules, nor synthetic classes
+  no strict 'refs';
+  # that would be some synthetic class, or a custom sub VERSION
   return 1 if (
     ! defined ${"${pkg}::VERSION"}
       or
@@ -192,36 +174,29 @@ visit_namespaces( action => sub {
     say_err
       "Calling `$pkg->VERSION` resulted in an exception, which should never "
     . "happen - please file a bug with the distribution containing $pkg. "
-    . "Complete exception text below:\n\n$err"
+    . "Follows the full text of the exception:\n\n$err\n"
     ;
   }
-  elsif( ! defined $mod_ver or ! length $mod_ver ) {
-    my $ret = defined $mod_ver
-      ? "the empty string ''"
-      : "'undef'"
-    ;
-
+  elsif( ! defined $mod_ver ) {
     say_err
-      "Calling `$pkg->VERSION` returned $ret, even though \$${pkg}::VERSION "
-    . "is defined, which should never happen - please file a bug with the "
-    . "distribution containing $pkg."
+      "Calling `$pkg->VERSION` returned 'undef', which should never "
+    . "happen - please file a bug with the distribution containing $pkg."
     ;
 
+  }
+  elsif( ! length $mod_ver ) {
+    say_err
+      "Calling `$pkg->VERSION` returned the empty string '', which should never "
+    . "happen - please file a bug with the distribution containing $pkg."
+    ;
     undef $mod_ver;
   }
 
   # if this is a real file - extract the version via EUMM whenever possible
   my $fn = $INC{module_notional_filename($pkg)};
 
-  my $eumm_ver = (
-    $fn
-      and
-    -f $fn
-      and
-    -r $fn
-      and
-    eval { MM->parse_version( $fn ) }
-  ) || undef;
+  my $eumm_ver = eval { MM->parse_version( $fn ) }
+    if $fn and  -f $fn and -r $fn;
 
   if (
     $has_versionpm
@@ -258,16 +233,10 @@ visit_namespaces( action => sub {
   1;
 });
 
-# In retrospect it makes little sense to omit this information - just
-# show everything at all times.
-# Nevertheless leave the dead code, in case it turns out to be a bad idea...
-my $show_all = 1;
-#my $show_all = $ENV{PERL_DESCRIBE_ALL_DEPS} || !DBICTest::RunMode->is_plain;
-
 # compress identical versions as close to the root as we can
 # unless we are dealing with a smoker - in which case we want
 # to see every MD5 there is
-unless ($show_all) {
+unless ( $ENV{AUTOMATED_TESTING} ) {
   for my $mod ( sort { length($b) <=> length($a) } keys %$version_list ) {
     my $parent = $mod;
 
@@ -285,8 +254,7 @@ unless ($show_all) {
 
 ok 1, (scalar keys %$version_list) . " distinctly versioned modules";
 
-# do not announce anything under ci - we are watching for STDERR silence
-exit if DBICTest::RunMode->is_ci;
+exit if ($ENV{TRAVIS}||'') eq 'true';
 
 # sort stuff into @INC segments
 my $segments;
@@ -295,11 +263,13 @@ MODULE:
 for my $mod ( sort { lc($a) cmp lc($b) } keys %$version_list ) {
   my $fn = $INC{module_notional_filename($mod)};
 
-  my $tuple = [ $mod ];
+  my $tuple = [
+    $mod,
+    ( ( $fn && -f $fn && -r $fn ) ? $fn : undef )
+  ];
 
-  if ( defined $fn && -f $fn && -r $fn ) {
-    push @$tuple, ( $fn = fixup_path($fn) );
 
+  if ($fn) {
     for my $lib (@lib_display_order, './lib') {
       if ( $lib_paths->{$lib} and index($fn, $lib_paths->{$lib}) == 0 ) {
         push @{$segments->{$lib}}, $tuple;
@@ -313,45 +283,30 @@ for my $mod ( sort { lc($a) cmp lc($b) } keys %$version_list ) {
 }
 
 # diag the result out
-my $max_ver_len = max map
-  { length $_ }
-  ( values %$version_list, 'xxx.yyyzzz_bbb' )
-;
+my $max_ver_len = max map { length $_ } values %$version_list;
 my $max_mod_len = max map { length $_ } keys %$version_list;
 
-my $discl = <<'EOD';
-
-Versions of all loadable modules within both the core and *OPTIONAL* dependency chains present on this system
-Note that *MANY* of these modules will *NEVER* be loaded during normal operation of DBIx::Class
-EOD
-
-$discl .= "(modules with versions identical to their parent namespace were omitted - set PERL_DESCRIBE_ALL_DEPS to see them)\n"
-  unless $show_all;
-
-diag $discl;
-
-diag "\n";
-
+my $diag = "\n\nVersions of all loadable modules within the configure/build/test/runtime dependency chains present on this system (both core and optional)\n\n";
 for my $seg ( '', @lib_display_order, './lib' ) {
   next unless $segments->{$seg};
 
-  diag sprintf "=== %s ===\n\n",
+  $diag .= sprintf "=== %s ===\n\n",
     $seg
       ? "Modules found in " . ( $Config{$seg} ? "\$Config{$seg}" : $seg )
-      : 'Misc versions'
+      : 'Misc'
   ;
 
-  diag sprintf (
-    "%*s  %*s%s\n",
+  $diag .= sprintf (
+    "   %*s  %*s%s\n",
     $max_ver_len => $version_list->{$_->[0]},
     -$max_mod_len => $_->[0],
     ($_->[1]
-      ? ' ' x (80 - min(78, $max_mod_len)) . "[ MD5: @{[ md5_of_fn( $_->[1] ) ]} ]"
+      ? "  [ MD5: @{[ md5_of_fn( $_->[1] ) ]} ]"
       : ''
     ),
   ) for @{$segments->{$seg}};
 
-  diag "\n\n"
+  $diag .= "\n\n"
 }
 
-diag "$discl\n";
+diag $diag;

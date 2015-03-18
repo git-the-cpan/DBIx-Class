@@ -47,12 +47,8 @@ sub populate_weakregistry {
       stacktrace => stacktrace(1),
       weakref => $target,
     };
-
-    # on perl < 5.8.3 sometimes a weaken can throw (can't find RT)
-    # so guard against that unlikely event
-    local $@;
-    eval { weaken( $weak_registry->{$refaddr}{weakref} ); $refs_traced++ }
-      or delete $weak_registry->{$refaddr};
+    weaken( $weak_registry->{$refaddr}{weakref} );
+    $refs_traced++;
   }
 
   my $desc = refdesc $target;
@@ -203,8 +199,6 @@ sub symtable_referenced_addresses {
 
 sub assert_empty_weakregistry {
   my ($weak_registry, $quiet) = @_;
-
-  Sub::Defer::undefer_all();
 
   # in case we hooked bless any extra object creation will wreak
   # havoc during the assert phase

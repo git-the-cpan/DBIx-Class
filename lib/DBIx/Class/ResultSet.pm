@@ -5,7 +5,6 @@ use warnings;
 use base qw/DBIx::Class/;
 use DBIx::Class::Carp;
 use DBIx::Class::ResultSetColumn;
-use DBIx::Class::ResultClass::HashRefInflator;
 use Scalar::Util qw/blessed weaken reftype/;
 use DBIx::Class::_Util qw(
   fail_on_internal_wantarray fail_on_internal_call UNRESOLVABLE_CONDITION
@@ -1383,7 +1382,11 @@ sub _construct_results {
   $self->{_result_inflator}{is_hri} = ( (
     ! $self->{_result_inflator}{is_core_row}
       and
-    $inflator_cref == \&DBIx::Class::ResultClass::HashRefInflator::inflate_result
+    $inflator_cref == (
+      require DBIx::Class::ResultClass::HashRefInflator
+        &&
+      DBIx::Class::ResultClass::HashRefInflator->can('inflate_result')
+    )
   ) ? 1 : 0 ) unless defined $self->{_result_inflator}{is_hri};
 
 
@@ -3813,8 +3816,10 @@ sub _calculate_score {
 
   if (ref $b eq 'HASH') {
     my ($b_key) = keys %{$b};
+    $b_key = '' if ! defined $b_key;
     if (ref $a eq 'HASH') {
       my ($a_key) = keys %{$a};
+      $a_key = '' if ! defined $a_key;
       if ($a_key eq $b_key) {
         return (1 + $self->_calculate_score( $a->{$a_key}, $b->{$b_key} ));
       } else {
@@ -4591,14 +4596,19 @@ setting is ignored and an appropriate warning is issued.
 
 =head2 where
 
-Adds extra conditions to the resultset, combined with the preexisting C<WHERE>
-conditions, same as the B<first> argument to the L<search operator|/search>
+=over 4
+
+Adds to the WHERE clause.
 
   # only return rows WHERE deleted IS NULL for all searches
   __PACKAGE__->resultset_attributes({ where => { deleted => undef } });
 
-Note that the above example is
-L<strongly discouraged|DBIx::Class::ResultSource/resultset_attributes>.
+Can be overridden by passing C<< { where => undef } >> as an attribute
+to a resultset.
+
+For more complicated where clauses see L<SQL::Abstract/WHERE CLAUSES>.
+
+=back
 
 =head2 cache
 

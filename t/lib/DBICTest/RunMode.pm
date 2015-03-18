@@ -198,18 +198,10 @@ sub is_author {
 
 sub is_smoker {
   return
-    __PACKAGE__->is_ci
+    ( ($ENV{TRAVIS}||'') eq 'true' and ($ENV{TRAVIS_REPO_SLUG}||'') eq 'dbsrgits/dbix-class' )
       ||
     ( $ENV{AUTOMATED_TESTING} && ! $ENV{PERL5_CPANM_IS_RUNNING} && ! $ENV{RELEASE_TESTING} )
   ;
-}
-
-sub is_ci {
-  return (
-    ($ENV{TRAVIS}||'') eq 'true'
-      and
-    ($ENV{TRAVIS_REPO_SLUG}||'') eq 'dbsrgits/dbix-class'
-  )
 }
 
 sub is_plain {

@@ -1,5 +1,3 @@
-use DBIx::Class::Optional::Dependencies -skip_all_without => qw( admin deploy );
-
 use strict;
 use warnings;
 
@@ -13,7 +11,16 @@ use lib qw(t/lib);
 use DBICTest;
 use DBIx::Class::_Util 'sigwarn_silencer';
 
-use DBIx::Class::Admin;
+BEGIN {
+    require DBIx::Class;
+    plan skip_all => 'Test needs ' . DBIx::Class::Optional::Dependencies->req_missing_for('admin')
+      unless DBIx::Class::Optional::Dependencies->req_ok_for('admin');
+
+    plan skip_all => 'Test needs ' . DBIx::Class::Optional::Dependencies->req_missing_for('deploy')
+      unless DBIx::Class::Optional::Dependencies->req_ok_for('deploy');
+}
+
+use_ok 'DBIx::Class::Admin';
 
 # lock early
 DBICTest->init_schema(no_deploy => 1, no_populate => 1);

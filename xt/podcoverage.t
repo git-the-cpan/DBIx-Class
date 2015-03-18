@@ -1,5 +1,3 @@
-use DBIx::Class::Optional::Dependencies -skip_all_without => 'test_podcoverage';
-
 use warnings;
 use strict;
 
@@ -8,6 +6,14 @@ use List::Util 'first';
 use lib qw(t/lib maint/.Generated_Pod/lib);
 use DBICTest;
 use namespace::clean;
+
+require DBIx::Class;
+unless ( DBIx::Class::Optional::Dependencies->req_ok_for ('test_podcoverage') ) {
+  my $missing = DBIx::Class::Optional::Dependencies->req_missing_for ('test_podcoverage');
+  $ENV{RELEASE_TESTING}
+    ? die ("Failed to load release-testing module requirements: $missing")
+    : plan skip_all => "Test needs: $missing"
+}
 
 # this has already been required but leave it here for CPANTS static analysis
 require Test::Pod::Coverage;
@@ -32,11 +38,6 @@ my $exceptions = {
             component_base_class
             mk_classdata
             mk_classaccessor
-        /]
-    },
-    'DBIx::Class::Optional::Dependencies' => {
-        ignore => [qw/
-            croak
         /]
     },
     'DBIx::Class::Carp' => {

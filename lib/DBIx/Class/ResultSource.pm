@@ -1904,11 +1904,11 @@ sub _resolve_relationship_condition {
 
   $args->{condition} ||= $rel_info->{cond};
 
-  $self->throw_exception( "Argument 'self_result_object' must be an object of class '@{[ $self->result_class ]}'" )
+  $self->throw_exception( "Argument 'self_result_object' must be an object inheriting from DBIx::Class::Row" )
     if (
       exists $args->{self_result_object}
         and
-      ( ! defined blessed $args->{self_result_object} or ! $args->{self_result_object}->isa($self->result_class) )
+      ( ! defined blessed $args->{self_result_object} or ! $args->{self_result_object}->isa('DBIx::Class::Row') )
     )
   ;
 
@@ -2306,6 +2306,9 @@ sub handle {
 
 my $global_phase_destroy;
 sub DESTROY {
+  ### NO detected_reinvoked_destructor check
+  ### This code very much relies on being called multuple times
+
   return if $global_phase_destroy ||= in_global_destruction;
 
 ######
