@@ -1,6 +1,6 @@
 Revision history for DBIx::Class
 
-0.082819_01 2015-03-18 14:00 (UTC)
+0.082819_02 2015-03-19 08:35 (UTC)
     * Fixes
         - Protect destructors from rare but possible double execution, and
           loudly warn the user whenever the problem is encountered (GH#63)
