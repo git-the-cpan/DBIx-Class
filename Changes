@@ -1,6 +1,6 @@
 Revision history for DBIx::Class
 
-0.082819_02 2015-03-19 08:35 (UTC)
+0.082820 2015-03-20 20:35 (UTC)
     * Fixes
         - Protect destructors from rare but possible double execution, and
           loudly warn the user whenever the problem is encountered (GH#63)
@@ -19,6 +19,7 @@ Revision history for DBIx::Class
 
     * Misc
         - Remove warning about potential side effects of RT#79576 (scheduled)
+        - Various doc improvements (GH#35, GH#62, GH#66, GH#70, GH#71, GH#72)
         - Depend on newer Moo, to benefit from a safer runtime (RT#93004)
         - Fix intermittent failures in the LeakTracer on 5.18+
         - Fix failures of t/54taint.t on Windows with spaces in the $^X

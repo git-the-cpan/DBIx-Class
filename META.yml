@@ -5,18 +5,18 @@ author:
   - 'castaway: Jess Robinson <castaway@desert-island.me.uk> (lions share of the reference documentation and manuals)'
   - 'ribasushi: Peter Rabbitson <ribasushi@cpan.org> (present day maintenance and controlled evolution)'
 build_requires:
-  DBD::SQLite: '1.29'
-  File::Temp: '0.22'
-  Package::Stash: '0.28'
-  Test::Deep: '0.101'
-  Test::Exception: '0.31'
-  Test::More: '0.94'
-  Test::Warn: '0.21'
+  DBD::SQLite: 1.29
+  File::Temp: 0.22
+  Package::Stash: 0.28
+  Test::Deep: 0.101
+  Test::Exception: 0.31
+  Test::More: 0.94
+  Test::Warn: 0.21
 configure_requires:
   ExtUtils::MakeMaker: 6.59
 distribution_type: module
 dynamic_config: 0
-generated_by: 'Module::Install version 1.12'
+generated_by: 'Module::Install version 1.06'
 license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -39,27 +39,27 @@ no_index:
     - DBIx::Class::_Util
     - DBIx::Class::ResultSet::Pager
 requires:
-  Class::Accessor::Grouped: '0.10012'
-  Class::C3::Componentised: '1.0009'
-  Class::Inspector: '1.24'
-  Config::Any: '0.20'
-  Context::Preserve: '0.01'
-  DBI: '1.57'
-  Data::Dumper::Concise: '2.020'
-  Data::Page: '2.00'
-  Devel::GlobalDestruction: '0.09'
-  Hash::Merge: '0.12'
-  List::Util: '1.16'
-  MRO::Compat: '0.12'
-  Module::Find: '0.07'
-  Moo: '2.000'
-  Path::Class: '0.18'
-  SQL::Abstract: '1.81'
-  Scope::Guard: '0.03'
-  Sub::Name: '0.04'
-  Text::Balanced: '2.00'
-  Try::Tiny: '0.07'
-  namespace::clean: '0.24'
+  Class::Accessor::Grouped: 0.10012
+  Class::C3::Componentised: 1.0009
+  Class::Inspector: 1.24
+  Config::Any: 0.20
+  Context::Preserve: 0.01
+  DBI: 1.57
+  Data::Dumper::Concise: 2.020
+  Data::Page: 2.00
+  Devel::GlobalDestruction: 0.09
+  Hash::Merge: 0.12
+  List::Util: 1.16
+  MRO::Compat: 0.12
+  Module::Find: 0.07
+  Moo: 2.000
+  Path::Class: 0.18
+  SQL::Abstract: 1.81
+  Scope::Guard: 0.03
+  Sub::Name: 0.04
+  Text::Balanced: 2.00
+  Try::Tiny: 0.07
+  namespace::clean: 0.24
   perl: 5.8.1
 resources:
   IRC: irc://irc.perl.org/#dbix-class
@@ -68,7 +68,7 @@ resources:
   homepage: http://www.dbix-class.org/
   license: http://dev.perl.org/licenses/
   repository: https://github.com/dbsrgits/DBIx-Class
-version: 0.082819_02
+version: 0.082820
 x_authority: cpan:RIBASUSHI
 x_contributors:
   - 'abraxxa: Alexander Hartmaier <abraxxa@cpan.org>'
@@ -77,6 +77,7 @@ x_contributors:
   - 'Alexander Keusch <cpan@keusch.at>'
   - 'alexrj: Alessandro Ranellucci <aar@cpan.org>'
   - 'alnewkirk: Al Newkirk <github@alnewkirk.com>'
+  - 'Altreus: Alastair McGowan-Douglas <alastair.mcgowan@opusvl.com>'
   - 'amiri: Amiri Barksdale <amiribarksdale@gmail.com>'
   - 'amoore: Andrew Moore <amoore@cpan.org>'
   - 'Andrew Mehta <Andrew@unitedgames.co.uk>'
@@ -100,6 +101,7 @@ x_contributors:
   - 'caldrin: Maik Hentsche <maik.hentsche@amd.com>'
   - 'castaway: Jess Robinson <castaway@desert-island.me.uk>'
   - 'chorny: Alexandr Ciornii <alexchorny@gmail.com>'
+  - 'cj: C.J. Adams-Collier <cjcollier@cpan.org>'
   - 'claco: Christopher H. Laco <claco@cpan.org>'
   - 'clkao: CL Kao <clkao@clkao.org>'
   - 'Ctrl-O http://ctrlo.com/'
@@ -116,6 +118,7 @@ x_contributors:
   - 'dkubb: Dan Kubb <dan.kubb-cpan@onautopilot.com>'
   - 'dnm: Justin Wheeler <jwheeler@datademons.com>'
   - 'dpetrov: Dimitar Petrov <mitakaa@gmail.com>'
+  - 'Dr^ZigMan: Robert Stone <drzigman@drzigman.com>'
   - 'dsteinbrunner: David Steinbrunner <dsteinbrunner@pobox.com>'
   - 'duncan_dmg: Duncan Garland <Duncan.Garland@motortrak.com>'
   - 'dwc: Daniel Westermann-Clark <danieltwc@cpan.org>'
@@ -127,7 +130,7 @@ x_contributors:
   - 'faxm0dem: Fabien Wernli <cpan@faxm0dem.org>'
   - 'felliott: Fitz Elliott <fitz.elliott@gmail.com>'
   - 'freetime: Bill Moseley <moseley@hank.org>'
-  - 'frew: Arthur Axel "fREW" Schmidt <frioux@gmail.com>'
+  - "frew: Arthur Axel \"fREW\" Schmidt <frioux@gmail.com>"
   - 'gbjk: Gareth Kirwan <gbjk@thermeon.com>'
   - 'Getty: Torsten Raudssus <torsten@raudss.us>'
   - 'goraxe: Gordon Irving <goraxe@cpan.org>'
@@ -141,6 +144,7 @@ x_contributors:
   - 'Ian Wells <ijw@cack.org.uk>'
   - 'idn: Ian Norton <i.norton@shadowcat.co.uk>'
   - 'ilmari: Dagfinn Ilmari Mannsåker <ilmari@ilmari.org>'
+  - 'ingy: Ingy döt Net <ingy@ingy.net>'
   - 'initself: Mike Baas <mike@initselftech.com>'
   - 'ironcamel: Naveed Massjouni <naveedm9@gmail.com>'
   - 'jasonmay: Jason May <jason.a.may@gmail.com>'
@@ -190,7 +194,7 @@ x_contributors:
   - 'ned: Neil de Carteret <n3dst4@gmail.com>'
   - 'nigel: Nigel Metheringham <nigelm@cpan.org>'
   - 'ningu: David Kamholz <dkamholz@cpan.org>'
-  - 'Nniuq: Ron "Quinn" Straight" <quinnfazigu@gmail.org>'
+  - "Nniuq: Ron \"Quinn\" Straight\" <quinnfazigu@gmail.org>"
   - 'norbi: Norbert Buchmuller <norbi@nix.hu>'
   - 'nothingmuch: Yuval Kogman <nothingmuch@woobling.org>'
   - 'nuba: Nuba Princigalli <nuba@cpan.org>'
@@ -198,7 +202,7 @@ x_contributors:
   - 'oalders: Olaf Alders <olaf@wundersolutions.com>'
   - 'Olly Betts <olly@survex.com>'
   - 'osfameron: Hakim Cassimally <osfameron@cpan.org>'
-  - 'ovid: Curtis "Ovid" Poe <ovid@cpan.org>'
+  - "ovid: Curtis \"Ovid\" Poe <ovid@cpan.org>"
   - 'oyse: Øystein Torget <oystein.torget@dnv.com>'
   - 'paulm: Paul Makepeace <paulm+pause@paulm.com>'
   - 'penguin: K J Cheetham <jamie@shadowcatsystems.co.uk>'
@@ -265,6 +269,7 @@ x_contributors:
   - 'wintermute: Toby Corkindale <tjc@cpan.org>'
   - 'wreis: Wallace Reis <wreis@cpan.org>'
   - 'xenoterracide: Caleb Cushing <xenoterracide@gmail.com>'
+  - 'xmikew: Mike Wisener <xmikew@32ths.com>'
   - 'yrlnry: Mark Jason Dominus <mjd@plover.com>'
   - 'zamolxes: Bogdan Lucaciu <bogdan@wiz.ro>'
   - 'Zefram: Andrew Main <zefram@fysh.org>'
