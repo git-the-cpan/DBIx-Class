@@ -55,7 +55,8 @@ my $weak_registry = {};
 my $has_dt;
 
 # Skip the heavy-duty leak tracing when just doing an install
-unless (DBICTest::RunMode->is_plain) {
+# or when having Moose crap all over everything
+if ( !$ENV{DBICTEST_VIA_REPLICATED} and !DBICTest::RunMode->is_plain ) {
 
   # redefine the bless override so that we can catch each and every object created
   no warnings qw/redefine once/;
@@ -98,7 +99,7 @@ unless (DBICTest::RunMode->is_plain) {
   # Load them and empty the registry
 
   # this loads the DT armada
-  $has_dt = DBIx::Class::Optional::Dependencies->req_ok_for('test_dt_sqlite');
+  $has_dt = DBIx::Class::Optional::Dependencies->req_ok_for([qw( test_rdbms_sqlite icdt )]);
 
   require Errno;
   require DBI;
@@ -115,8 +116,6 @@ unless (DBICTest::RunMode->is_plain) {
   my $schema = DBICTest->init_schema;
   my $rs = $schema->resultset ('Artist');
   my $storage = $schema->storage;
-
-  ok ($storage->connected, 'we are connected');
 
   my $row_obj = $rs->search({}, { rows => 1})->next;  # so that commits/rollbacks work
   ok ($row_obj, 'row from db');

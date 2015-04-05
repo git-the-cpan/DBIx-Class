@@ -9,6 +9,10 @@ use DBICTest;
 my $schema = DBICTest->init_schema();
 my $storage = $schema->storage;
 
+$storage = $storage->master
+  if $ENV{DBICTEST_VIA_REPLICATED};
+
+
 # test (re)connection
 for my $disconnect (0, 1) {
   $schema->storage->_dbh->disconnect if $disconnect;
@@ -43,7 +47,7 @@ is_deeply (
 
 # test nested aliasing
 my $res = 'original';
-$storage->dbh_do (sub {
+$schema->storage->dbh_do (sub {
   shift->dbh_do(sub { $_[3] = 'changed' }, @_)
 }, $res);
 

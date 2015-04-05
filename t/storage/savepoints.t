@@ -3,6 +3,7 @@ use warnings;
 
 use Test::More;
 use Test::Exception;
+use DBIx::Class::_Util qw(modver_gt_or_eq sigwarn_silencer);
 
 use lib qw(t/lib);
 use DBICTest;
@@ -69,8 +70,17 @@ for ('', keys %$env2optdep) { SKIP: {
 
   note "Testing $prefix";
 
-  local $schema->storage->{debugobj} = my $stats = DBICTest::SVPTracerObj->new;
-  local $schema->storage->{debug} = 1;
+  # can not use local() due to an unknown number of storages
+  # (think replicated)
+  my $orig_states = { map
+    { $_ => $schema->storage->$_ }
+    qw(debugcb debugobj debug)
+  };
+  my $sg = Scope::Guard->new(sub {
+    $schema->storage->$_ ( $orig_states->{$_} ) for keys %$orig_states;
+  });
+  $schema->storage->debugobj (my $stats = DBICTest::SVPTracerObj->new);
+  $schema->storage->debug (1);
 
   $schema->resultset('Artist')->create({ name => 'foo' });
 
@@ -218,6 +228,15 @@ for ('', keys %$env2optdep) { SKIP: {
 
   is_deeply( $schema->storage->savepoints, [], 'All savepoints forgotten' );
 
+SKIP: {
+  skip "Reading inexplicably fails on very old replicated DBD::SQLite<1.33", 1 if (
+    $ENV{DBICTEST_VIA_REPLICATED}
+      and
+    $prefix eq 'SQLite Internal DB'
+      and
+    ! modver_gt_or_eq('DBD::SQLite', '1.33')
+  );
+
   ok($ars->search({ name => 'in_outer_transaction' })->first,
     'commit from outer transaction');
   ok($ars->search({ name => 'in_outer_transaction2' })->first,
@@ -227,14 +246,17 @@ for ('', keys %$env2optdep) { SKIP: {
   is $ars->search({ name => 'in_inner_transaction_rolling_back' })->first,
     undef,
     'rollback from inner transaction';
+}
 
 ### cleanupz
-  $schema->storage->dbh->do ("DROP TABLE artist");
+  $schema->storage->dbh_do(sub { $_[1]->do("DROP TABLE artist") });
 }}
 
 done_testing;
 
 END {
-  eval { $schema->storage->dbh->do ("DROP TABLE artist") } if defined $schema;
+  local $SIG{__WARN__} = sigwarn_silencer( qr/Internal transaction state of handle/ )
+    unless modver_gt_or_eq('DBD::SQLite', '1.33');
+  eval { $schema->storage->dbh_do(sub { $_[1]->do("DROP TABLE artist") }) } if defined $schema;
   undef $schema;
 }

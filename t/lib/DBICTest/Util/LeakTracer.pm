@@ -10,7 +10,7 @@ use DBIx::Class::Optional::Dependencies;
 use Data::Dumper::Concise;
 use DBICTest::Util qw( stacktrace visit_namespaces );
 use constant {
-  CV_TRACING => DBIx::Class::Optional::Dependencies->req_ok_for ('test_leaks_heavy'),
+  CV_TRACING => !DBICTest::RunMode->is_plain && DBIx::Class::Optional::Dependencies->req_ok_for ('test_leaks_heavy'),
 };
 
 use base 'Exporter';
@@ -47,8 +47,12 @@ sub populate_weakregistry {
       stacktrace => stacktrace(1),
       weakref => $target,
     };
-    weaken( $weak_registry->{$refaddr}{weakref} );
-    $refs_traced++;
+
+    # on perl < 5.8.3 sometimes a weaken can throw (can't find RT)
+    # so guard against that unlikely event
+    local $@;
+    eval { weaken( $weak_registry->{$refaddr}{weakref} ); $refs_traced++ }
+      or delete $weak_registry->{$refaddr};
   }
 
   my $desc = refdesc $target;

@@ -28,8 +28,6 @@ foreach my $serializer (@serializers) {
     }
 }
 
-plan (skip_all => "No suitable serializer found") unless $selected;
-
 DBICTest::Schema::Serialized->inflate_column( 'serialized',
     { inflate => $selected->{inflater},
       deflate => $selected->{deflater},
@@ -97,7 +95,7 @@ is_deeply (
 );
 
 #===== make sure make_column_dirty interacts reasonably with inflation
-$object = $rs->first;
+$object = $rs->search({}, { rows => 1 })->next;
 $object->update ({serialized => { x => 'y'}});
 
 $object->serialized->{x} = 'z'; # change state without notifying $object

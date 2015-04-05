@@ -68,7 +68,7 @@ resources:
   homepage: http://www.dbix-class.org/
   license: http://dev.perl.org/licenses/
   repository: https://github.com/dbsrgits/DBIx-Class
-version: 0.082820
+version: 0.082899_07
 x_authority: cpan:RIBASUSHI
 x_contributors:
   - 'abraxxa: Alexander Hartmaier <abraxxa@cpan.org>'
@@ -132,6 +132,7 @@ x_contributors:
   - 'freetime: Bill Moseley <moseley@hank.org>'
   - "frew: Arthur Axel \"fREW\" Schmidt <frioux@gmail.com>"
   - 'gbjk: Gareth Kirwan <gbjk@thermeon.com>'
+  - 'geotheve: Georgina Thevenet <geotheve@gmail.com>'
   - 'Getty: Torsten Raudssus <torsten@raudss.us>'
   - 'goraxe: Gordon Irving <goraxe@cpan.org>'
   - 'gphat: Cory G Watson <gphat@cpan.org>'
@@ -165,8 +166,10 @@ x_contributors:
   - 'jshirley: J. Shirley <jshirley@gmail.com>'
   - 'kaare: Kaare Rasmussen'
   - 'kd: Kieren Diment <diment@gmail.com>'
+  - 'kentnl: Kent Fredric <kentnl@cpan.org>'
   - 'kkane: Kevin L. Kane <kevin.kane@gmail.com>'
   - 'konobi: Scott McWhirter <konobi@cpan.org>'
+  - 'Lasse Makholm <lasse@unity3d.com>'
   - 'lejeunerenard: Sean Zellmer <sean@lejeunerenard.com>'
   - 'littlesavage: Alexey Illarionov <littlesavage@orionet.ru>'
   - 'lukes: Luke Saunders <luke.saunders@gmail.com>'

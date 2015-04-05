@@ -6,11 +6,10 @@ use Test::Exception;
 use Test::Warn;
 use lib qw(t/lib);
 use DBICTest;
-use DBIx::Class::_Util 'sigwarn_silencer';
+use DBIx::Class::_Util qw(sigwarn_silencer serialize);
 use Path::Class::File ();
 use Math::BigInt;
 use List::Util qw/shuffle/;
-use Storable qw/nfreeze dclone/;
 
 my $schema = DBICTest->init_schema();
 
@@ -454,7 +453,7 @@ warnings_like {
   }
 
   local $Storable::canonical = 1;
-  my $preimage = nfreeze($args);
+  my $preimage = serialize($args);
 
 
   for my $tst (keys %$args) {
@@ -500,7 +499,7 @@ warnings_like {
   }
 
   ok (
-    ($preimage eq nfreeze($args)),
+    ($preimage eq serialize($args)),
     'Arguments fed to populate()/create() unchanged'
   );
 

@@ -1,5 +1,9 @@
 Revision history for DBIx::Class
 
+0.082899_07 !!! EARLY ALPHA TEST OF t/00describe-environment !!! 2015-04-05 14:25 (UTC)
+    * Misc
+        - things
+
 0.082820 2015-03-20 20:35 (UTC)
     * Fixes
         - Protect destructors from rare but possible double execution, and
