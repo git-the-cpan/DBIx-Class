@@ -52,7 +52,7 @@ use Config;
 use File::Find 'find';
 use Digest::MD5 ();
 use Cwd 'abs_path';
-use List::Util qw(max min);
+use List::Util 'max';
 use ExtUtils::MakeMaker;
 use DBICTest::Util 'visit_namespaces';
 
@@ -67,11 +67,17 @@ my $known_libpaths = {
   SL => {
     config_key => 'sitelib',
   },
+  SS => {
+    config_key => 'sitelib_stem',
+  },
   VA => {
     config_key => 'vendorarch',
   },
   VL => {
     config_key => 'vendorlib',
+  },
+  VS => {
+    config_key => 'vendorlib_stem',
   },
   PA => {
     config_key => 'archlib',
@@ -87,6 +93,9 @@ my $known_libpaths = {
   },
   T => {
     relpath => './t',
+  },
+  CWD => {
+    relpath => '.',
   },
   HOME => {
     relpath => '~',
@@ -305,7 +314,7 @@ visit_namespaces( action => sub {
     }
   }
   elsif ( $full_path = $known_failed_loads->{$pkg} ) {
-    $interesting_modules->{$pkg}{version} = '!! LOAD FAILED !!';
+    $interesting_modules->{$pkg}{version} = '!! LOAD FAIL !!';
   }
 
   if ($full_path) {
@@ -314,7 +323,7 @@ visit_namespaces( action => sub {
       $marker = $m;
     }
     elsif (defined ( my $idx = module_found_at_inc_index($pkg, \@initial_INC) ) ) {
-      $marker = sprintf '$INC[%d]', $idx;
+      $marker = "\$INC[$idx]";
     }
 
     # we are only interested if there was a declared version already above
@@ -357,7 +366,6 @@ my $max_ver_len = max map
   { length "$_" }
   ( 'xxx.yyyzzz_bbb', map { $_->{version} || '' } values %$interesting_modules )
 ;
-my $max_mod_len = max map { length $_ } keys %$interesting_modules;
 my $max_marker_len = max map { length $_ } ( '$INC[99]', keys %{ $seen_known_markers || {} } );
 
 my $discl = <<'EOD';
@@ -371,6 +379,14 @@ EOD
 # makes it less likely for parallel test execution to insert bogus lines
 my $final_out = "\n$discl\n";
 
+$final_out .= "\@INC at startup (does not reflect manipulation at runtime):\n";
+
+$final_out .= sprintf ( "% 2s: %s\n",
+  $_,
+  shorten_fn($initial_INC[$_])
+) for (0.. $#initial_INC);
+
+$final_out .= "\n";
 
 if ($seen_known_markers) {
 
@@ -395,16 +411,16 @@ $final_out .= "=============================\n";
 
 $final_out .= join "\n", (map
   { sprintf (
-    "%*s  %*s  %s%s",
+    "%*s  %*s  %*s%s",
     $max_marker_len => $interesting_modules->{$_}{source_marker} || '',
     $max_ver_len => ( defined $interesting_modules->{$_}{version}
       ? $interesting_modules->{$_}{version}
       : ''
     ),
-    $_,
+    -78 => $_,
     ($interesting_modules->{$_}{full_path}
-      ? ' ' x (80 - min( 78, length($_) )) . "[ MD5: @{[ get_md5( $interesting_modules->{$_}{full_path} ) ]} ]"
-      : ''
+      ? "  [ MD5: @{[ get_md5( $interesting_modules->{$_}{full_path} ) ]} ]"
+      : "! -f \$INC{'@{[ module_notional_filename($_) ]}'}"
     ),
   ) }
   sort { lc($a) cmp lc($b) } keys %$interesting_modules
@@ -453,13 +469,23 @@ sub shorten_fn {
   my $l = matching_known_lib( $fn )
     or return $fn;
 
-  if ($l->{relpath}) {
-    $fn =~ s!\Q$l->{full_path}!$l->{relpath}!;
-  }
-  elsif ($l->{config_key}) {
-    $fn =~ s!\Q$l->{full_path}!<<$l->{marker}>>!
-      and
-    $seen_known_markers->{$l->{marker}} = 1;
+  if ($l) {
+    my $full_fn = full_path($fn);
+
+    $full_fn =~ s| (?<! / ) $|/|x
+      if -d $full_fn;
+
+    if ($l->{relpath}) {
+      $full_fn =~ s!\Q$l->{full_path}!$l->{relpath}!
+        and return $full_fn;
+    }
+    elsif ($l->{config_key}) {
+      $full_fn =~ s!\Q$l->{full_path}!<<$l->{marker}>>!
+        and
+      $seen_known_markers->{$l->{marker}} = 1
+        and
+      return $full_fn;
+    }
   }
 
   $fn;
