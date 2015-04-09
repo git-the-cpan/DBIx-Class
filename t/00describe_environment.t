@@ -60,7 +60,7 @@ use DBICTest::Util 'visit_namespaces';
 use DBICTest;
 use DBICTest::Schema;
 
-my $known_libpaths = {
+my $known_paths = {
   SA => {
     config_key => 'sitearch',
   },
@@ -85,22 +85,30 @@ my $known_libpaths = {
   PL => {
     config_key => 'privlib',
   },
+  BLA => {
+    rel_path => './blib/arch',
+  },
+  BLL => {
+    rel_path => './blib/lib',
+  },
   INC => {
-    relpath => './inc',
+    rel_path => './inc',
   },
   LIB => {
-    relpath => './lib',
+    rel_path => './lib',
   },
   T => {
-    relpath => './t',
+    rel_path => './t',
   },
   CWD => {
-    relpath => '.',
+    rel_path => '.',
   },
   HOME => {
-    relpath => '~',
-    full_path => full_path (
+    rel_path => '~',
+    abs_unix_path => abs_unix_path (
       eval { require File::HomeDir and File::HomeDir->my_home }
+        ||
+      $ENV{USERPROFILE}
         ||
       $ENV{HOME}
         ||
@@ -109,25 +117,25 @@ my $known_libpaths = {
   },
 };
 
-for my $k (keys %$known_libpaths) {
-  my $v = $known_libpaths->{$k};
+for my $k (keys %$known_paths) {
+  my $v = $known_paths->{$k};
 
   # never use home as a found-in-dir marker - it is too broad
   # HOME is only used by the shortener
   $v->{marker} = $k unless $k eq 'HOME';
 
-  unless ( $v->{full_path} ) {
-    if ( $v->{relpath} ) {
-      $v->{full_path} = full_path( $v->{relpath} );
+  unless ( $v->{abs_unix_path} ) {
+    if ( $v->{rel_path} ) {
+      $v->{abs_unix_path} = abs_unix_path( $v->{rel_path} );
     }
     elsif ( $Config{ $v->{config_key} || '' } ) {
-      $v->{full_path} = full_path (
+      $v->{abs_unix_path} = abs_unix_path (
         $Config{"$v->{config_key}exp"} || $Config{$v->{config_key}}
       );
     }
   }
 
-  delete $known_libpaths->{$k} unless $v->{full_path} and -d $v->{full_path};
+  delete $known_paths->{$k} unless $v->{abs_unix_path} and -d $v->{abs_unix_path};
 }
 my $seen_known_markers;
 
@@ -190,7 +198,7 @@ for my $mod (@known_modules) {
   next if defined $INC{$inc_key};
 
   if (defined( my $idx = module_found_at_inc_index( $mod, \@INC ) ) ) {
-    $known_failed_loads->{$mod} = full_path( "$INC[$idx]/$inc_key" );
+    $known_failed_loads->{$mod} = abs_unix_path( "$INC[$idx]/$inc_key" );
   }
 
 }
@@ -204,7 +212,7 @@ my $perl = 'perl';
 #  $conf_arg =~ s!
 #    \= (.+)
 #  !
-#    '=' . shorten_fn(full_path($1) )
+#    '=' . shorten_fn($1)
 #  !ex;
 #
 #  $perl .= " $conf_arg";
@@ -214,7 +222,7 @@ my $interesting_modules = {
   # pseudo module
   $perl => {
     version => $],
-    full_path => $^X,
+    abs_unix_path => $^X,
   }
 };
 
@@ -232,14 +240,14 @@ visit_namespaces( action => sub {
 
   my $inc_key = module_notional_filename($pkg);
 
-  my $full_path = (
+  my $abs_unix_path = (
     $INC{$inc_key}
       and
     -f $INC{$inc_key}
       and
     -r $INC{$inc_key}
       and
-    full_path($INC{$inc_key})
+    abs_unix_path($INC{$inc_key})
   );
 
   # handle versions first (not interested in synthetic classes)
@@ -277,9 +285,9 @@ visit_namespaces( action => sub {
     }
 
     if (
-      $full_path
+      $abs_unix_path
         and
-      defined ( my $eumm_ver = eval { MM->parse_version( $full_path ) } )
+      defined ( my $eumm_ver = eval { MM->parse_version( $abs_unix_path ) } )
     ) {
 
       # can only run the check reliably if v.pm is there
@@ -298,7 +306,7 @@ visit_namespaces( action => sub {
       ) {
         say_err (
           "Mismatch of versions '$mod_ver' and '$eumm_ver', obtained respectively "
-        . "via `$pkg->VERSION` and parsing the version out of @{[ shorten_fn( $full_path ) ]} "
+        . "via `$pkg->VERSION` and parsing the version out of @{[ shorten_fn( $abs_unix_path ) ]} "
         . "with ExtUtils::MakeMaker\@@{[ ExtUtils::MakeMaker->VERSION ]}. "
         . "This should never happen - please check whether this is still present "
         . "in the latest version, and then file a bug with the distribution "
@@ -313,17 +321,27 @@ visit_namespaces( action => sub {
       $interesting_modules->{$pkg}{version} = $mod_ver;
     }
   }
-  elsif ( $full_path = $known_failed_loads->{$pkg} ) {
+  elsif ( $abs_unix_path = $known_failed_loads->{$pkg} ) {
     $interesting_modules->{$pkg}{version} = '!! LOAD FAIL !!';
   }
 
-  if ($full_path) {
+  if ($abs_unix_path) {
     my $marker;
-    if (my $m = ( matching_known_lib( $full_path ) || {} )->{marker} ) {
-      $marker = $m;
+
+    my $current_inc_idx = module_found_at_inc_index($pkg, \@INC);
+    my $p = subpath_of_known_path( $abs_unix_path );
+
+    if (
+      defined $current_inc_idx
+        and
+      $p->{marker}
+        and
+      abs_unix_path($INC[$current_inc_idx]) eq $p->{abs_unix_path}
+    ) {
+      $marker = $p->{marker};
     }
-    elsif (defined ( my $idx = module_found_at_inc_index($pkg, \@initial_INC) ) ) {
-      $marker = "\$INC[$idx]";
+    elsif (defined ( my $initial_inc_idx = module_found_at_inc_index($pkg, \@initial_INC) ) ) {
+      $marker = "\$INC[$initial_inc_idx]";
     }
 
     # we are only interested if there was a declared version already above
@@ -339,12 +357,12 @@ visit_namespaces( action => sub {
     ) {
       $interesting_modules->{$pkg}{source_marker} = $marker;
       $seen_known_markers->{$marker} = 1
-        if $known_libpaths->{$marker};
+        if $known_paths->{$marker};
     }
 
     # at this point only fill in the path (md5 calc) IFF it is interesting
     # in any respect
-    $interesting_modules->{$pkg}{full_path} = $full_path
+    $interesting_modules->{$pkg}{abs_unix_path} = $abs_unix_path
       if $interesting_modules->{$pkg};
   }
 
@@ -394,7 +412,7 @@ if ($seen_known_markers) {
     {
       sprintf "%*s: %s",
         $max_marker_len => $_->{marker},
-        ($_->{config_key} ? "\$Config{$_->{config_key}}" : "$_->{relpath}/*" )
+        ($_->{config_key} ? "\$Config{$_->{config_key}}" : "$_->{rel_path}/" )
     }
     sort
       {
@@ -402,7 +420,7 @@ if ($seen_known_markers) {
           or
         ( $a->{marker}||'') cmp ($b->{marker}||'')
       }
-      @{$known_libpaths}{keys %$seen_known_markers}
+      @{$known_paths}{keys %$seen_known_markers}
   ), '', '';
 
 }
@@ -418,8 +436,8 @@ $final_out .= join "\n", (map
       : ''
     ),
     -78 => $_,
-    ($interesting_modules->{$_}{full_path}
-      ? "  [ MD5: @{[ get_md5( $interesting_modules->{$_}{full_path} ) ]} ]"
+    ($interesting_modules->{$_}{abs_unix_path}
+      ? "  [ MD5: @{[ get_md5( $interesting_modules->{$_}{abs_unix_path} ) ]} ]"
       : "! -f \$INC{'@{[ module_notional_filename($_) ]}'}"
     ),
   ) }
@@ -444,85 +462,89 @@ sub try_module_require {
   eval "require $_[0]";
 }
 
-sub full_path {
+sub abs_unix_path {
   return '' unless ( defined $_[0] and -e $_[0] );
 
   # File::Spec's rel2abs does not resolve symlinks
   # we *need* to look at the filesystem to be sure
-  my $fn = abs_path($_[0]);
+  my $abs_fn = abs_path($_[0]);
 
-  if ( $^O eq 'MSWin32' and $fn ) {
+  if ( $^O eq 'MSWin32' and $abs_fn ) {
 
     # sometimes we can get a short/longname mix, normalize everything to longnames
-    $fn = Win32::GetLongPathName($fn);
+    $abs_fn = Win32::GetLongPathName($abs_fn);
 
     # Fixup (native) slashes in Config not matching (unixy) slashes in INC
-    $fn =~ s|\\|/|g;
+    $abs_fn =~ s|\\|/|g;
   }
 
-  $fn;
+  $abs_fn;
 }
 
 sub shorten_fn {
   my $fn = shift;
 
-  my $l = matching_known_lib( $fn )
-    or return $fn;
+  if (my $p = subpath_of_known_path( $fn ) ) {
 
-  if ($l) {
-    my $full_fn = full_path($fn);
+    my $abs_fn = abs_unix_path($fn);
 
-    $full_fn =~ s| (?<! / ) $|/|x
-      if -d $full_fn;
+    $abs_fn =~ s| (?<! / ) $|/|x
+      if -d $abs_fn;
 
-    if ($l->{relpath}) {
-      $full_fn =~ s!\Q$l->{full_path}!$l->{relpath}!
-        and return $full_fn;
+    if ($p->{rel_path}) {
+      $abs_fn =~ s!\Q$p->{abs_unix_path}!$p->{rel_path}!
+        and return $abs_fn;
     }
-    elsif ($l->{config_key}) {
-      $full_fn =~ s!\Q$l->{full_path}!<<$l->{marker}>>!
+    elsif ($p->{config_key}) {
+      $abs_fn =~ s!\Q$p->{abs_unix_path}!<<$p->{marker}>>!
         and
-      $seen_known_markers->{$l->{marker}} = 1
+      $seen_known_markers->{$p->{marker}} = 1
         and
-      return $full_fn;
+      return $abs_fn;
     }
   }
 
+  # return as-is otherwise (non-abs)
   $fn;
 }
 
-sub matching_known_lib {
-  my $fn = full_path( $_[0] )
+sub subpath_of_known_path {
+  my $abs_fn = abs_unix_path( $_[0] )
     or return '';
 
-  for my $l (
-    sort { length( $b->{full_path} ) <=> length( $a->{full_path} ) }
-    values %$known_libpaths
+  for my $p (
+    sort { length( $b->{abs_unix_path} ) <=> length( $a->{abs_unix_path} ) }
+    values %$known_paths
   ) {
     # run through the matcher twice - first always append a /
     # then try without
     # important to avoid false positives
     for my $suff ( '/', '' ) {
-      return { %$l } if 0 == index( $fn, "$l->{full_path}$suff" );
+      return { %$p } if 0 == index( $abs_fn, "$p->{abs_unix_path}$suff" );
     }
   }
 }
 
 sub module_found_at_inc_index {
-  my ($mod, $dirs) = @_;
+  my ($mod, $inc_dirs) = @_;
+
+  return undef unless @$inc_dirs;
 
   my $fn = module_notional_filename($mod);
 
-  for my $i ( 0 .. $#$dirs ) {
+  for my $i ( 0 .. $#$inc_dirs ) {
+
     # searching from here on out won't mean anything
-    return undef if length ref $dirs->[$i];
+    # FIXME - there is actually a way to interrogate this safely, but
+    # that's a fight for another day
+    return undef if length ref $inc_dirs->[$i];
 
     if (
-      -d $dirs->[$i]
+      -d $inc_dirs->[$i]
         and
-      -f "$dirs->[$i]/$fn"
+      -f "$inc_dirs->[$i]/$fn"
         and
-      -r "$dirs->[$i]/$fn"
+      -r "$inc_dirs->[$i]/$fn"
     ) {
       return $i;
     }
