@@ -52,13 +52,13 @@ use Config;
 use File::Find 'find';
 use Digest::MD5 ();
 use Cwd 'abs_path';
+use File::Spec;
 use List::Util 'max';
 use ExtUtils::MakeMaker;
-use DBICTest::Util 'visit_namespaces';
 
-# load these two to pull in the t/lib armada
-use DBICTest;
-use DBICTest::Schema;
+use DBICTest::RunMode;
+use DBICTest::Util 'visit_namespaces';
+use DBIx::Class::Optional::Dependencies;
 
 my $known_paths = {
   SA => {
@@ -69,6 +69,11 @@ my $known_paths = {
   },
   SS => {
     config_key => 'sitelib_stem',
+    match_order => 1,
+  },
+  SP => {
+    config_key => 'siteprefix',
+    match_order => 2,
   },
   VA => {
     config_key => 'vendorarch',
@@ -78,6 +83,11 @@ my $known_paths = {
   },
   VS => {
     config_key => 'vendorlib_stem',
+    match_order => 3,
+  },
+  VP => {
+    config_key => 'vendorprefix',
+    match_order => 4,
   },
   PA => {
     config_key => 'archlib',
@@ -85,20 +95,28 @@ my $known_paths = {
   PL => {
     config_key => 'privlib',
   },
+  PP => {
+    config_key => 'prefix',
+    match_order => 5,
+  },
   BLA => {
     rel_path => './blib/arch',
+    skip_unversioned_modules => 1,
   },
   BLL => {
     rel_path => './blib/lib',
+    skip_unversioned_modules => 1,
   },
   INC => {
     rel_path => './inc',
   },
   LIB => {
     rel_path => './lib',
+    skip_unversioned_modules => 1,
   },
   T => {
     rel_path => './t',
+    skip_unversioned_modules => 1,
   },
   CWD => {
     rel_path => '.',
@@ -345,14 +363,14 @@ visit_namespaces( action => sub {
     }
 
     # we are only interested if there was a declared version already above
-    # OR if the module came from somewhere other than T or LIB
+    # OR if the module came from somewhere other than skip_unversioned_modules
     if (
       $marker
         and
       (
         $interesting_modules->{$pkg}
           or
-        $marker !~ /^ (?: T | LIB ) $/x
+        !$p->{skip_unversioned_modules}
       )
     ) {
       $interesting_modules->{$pkg}{source_marker} = $marker;
@@ -369,9 +387,11 @@ visit_namespaces( action => sub {
   1;
 });
 
-# compress identical versions sourced from ./lib and ./t as close to the root
+# compress identical versions sourced from ./blib, ./lib and ./t as close to the root
 # of a namespace as we can
-purge_identically_versioned_submodules_with_markers([qw( LIB T )]);
+purge_identically_versioned_submodules_with_markers([ map {
+  ( $_->{skip_unversioned_modules} && $_->{marker} ) || ()
+} values %$known_paths ]);
 
 ok 1, (scalar keys %$interesting_modules) . " distinctly versioned modules found";
 
@@ -384,13 +404,16 @@ my $max_ver_len = max map
   { length "$_" }
   ( 'xxx.yyyzzz_bbb', map { $_->{version} || '' } values %$interesting_modules )
 ;
-my $max_marker_len = max map { length $_ } ( '$INC[99]', keys %{ $seen_known_markers || {} } );
+my $max_marker_len = max map { length $_ } ( '$INC[999]', keys %{ $seen_known_markers || {} } );
 
 my $discl = <<'EOD';
 
-List of loadable modules within both the core and *OPTIONAL* dependency chains present on this system
-Note that *MANY* of these modules will *NEVER* be loaded during normal operation of DBIx::Class
-(modules sourced from ./lib and ./t with versions identical to their parent namespace were omitted for brevity)
+List of loadable modules within both the core and *OPTIONAL* dependency
+chains present on this system (modules sourced from ./blib, ./lib and ./t
+with versions identical to their parent namespace were omitted for brevity)
+
+    *** Note that *MANY* of these modules will *NEVER* be loaded ***
+            *** during normal operation of DBIx::Class ***
 EOD
 
 # pre-assemble everything and print it in one shot
@@ -399,7 +422,7 @@ my $final_out = "\n$discl\n";
 
 $final_out .= "\@INC at startup (does not reflect manipulation at runtime):\n";
 
-$final_out .= sprintf ( "% 2s: %s\n",
+$final_out .= sprintf ( "% 3s: %s\n",
   $_,
   shorten_fn($initial_INC[$_])
 ) for (0.. $#initial_INC);
@@ -452,7 +475,7 @@ exit 0;
 
 
 
-sub say_err { print STDERR @_, "\n\n" };
+sub say_err { print STDERR "\n", @_, "\n\n" };
 
 # do !!!NOT!!! use Module::Runtime's require_module - it breaks CORE::require
 sub try_module_require {
@@ -463,7 +486,11 @@ sub try_module_require {
 }
 
 sub abs_unix_path {
-  return '' unless ( defined $_[0] and -e $_[0] );
+  return '' unless (
+    defined $_[0]
+      and
+    ( -e $_[0] or File::Spec->file_name_is_absolute($_[0]) )
+  );
 
   # File::Spec's rel2abs does not resolve symlinks
   # we *need* to look at the filesystem to be sure
@@ -484,10 +511,9 @@ sub abs_unix_path {
 sub shorten_fn {
   my $fn = shift;
 
+  my $abs_fn = abs_unix_path($fn);
+
   if (my $p = subpath_of_known_path( $fn ) ) {
-
-    my $abs_fn = abs_unix_path($fn);
-
     $abs_fn =~ s| (?<! / ) $|/|x
       if -d $abs_fn;
 
@@ -504,8 +530,12 @@ sub shorten_fn {
     }
   }
 
-  # return as-is otherwise (non-abs)
-  $fn;
+  # we got so far - not a known path
+  # return the unixified version it if was absolute, leave as-is otherwise
+  return ( $abs_fn and File::Spec->file_name_is_absolute( $fn ) )
+    ? $abs_fn
+    : $fn
+  ;
 }
 
 sub subpath_of_known_path {
@@ -513,7 +543,11 @@ sub subpath_of_known_path {
     or return '';
 
   for my $p (
-    sort { length( $b->{abs_unix_path} ) <=> length( $a->{abs_unix_path} ) }
+    sort {
+      length( $b->{abs_unix_path} ) <=> length( $a->{abs_unix_path} )
+        or
+      ( $a->{match_order} || 0 ) <=> ( $b->{match_order} || 0 )
+    }
     values %$known_paths
   ) {
     # run through the matcher twice - first always append a /
