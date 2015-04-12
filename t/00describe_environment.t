@@ -155,7 +155,7 @@ for my $k (keys %$known_paths) {
 
   delete $known_paths->{$k} unless $v->{abs_unix_path} and -d $v->{abs_unix_path};
 }
-my $seen_known_markers;
+my ($seen_known_markers, $seen_initial_inc_indices);
 
 # first run through lib/ and *try* to load anything we can find
 # within our own project
@@ -344,7 +344,7 @@ visit_namespaces( action => sub {
   }
 
   if ($abs_unix_path) {
-    my $marker;
+    my ($marker, $initial_inc_idx);
 
     my $current_inc_idx = module_found_at_inc_index($pkg, \@INC);
     my $p = subpath_of_known_path( $abs_unix_path );
@@ -358,7 +358,7 @@ visit_namespaces( action => sub {
     ) {
       $marker = $p->{marker};
     }
-    elsif (defined ( my $initial_inc_idx = module_found_at_inc_index($pkg, \@initial_INC) ) ) {
+    elsif (defined ( $initial_inc_idx = module_found_at_inc_index($pkg, \@initial_INC) ) ) {
       $marker = "\$INC[$initial_inc_idx]";
     }
 
@@ -374,8 +374,12 @@ visit_namespaces( action => sub {
       )
     ) {
       $interesting_modules->{$pkg}{source_marker} = $marker;
+
       $seen_known_markers->{$marker} = 1
         if $known_paths->{$marker};
+
+      $seen_initial_inc_indices->{$initial_inc_idx} = 1
+        if defined $initial_inc_idx;
     }
 
     # at this point only fill in the path (md5 calc) IFF it is interesting
@@ -422,10 +426,30 @@ my $final_out = "\n$discl\n";
 
 $final_out .= "\@INC at startup (does not reflect manipulation at runtime):\n";
 
-$final_out .= sprintf ( "% 3s: %s\n",
-  $_,
-  shorten_fn($initial_INC[$_])
-) for (0.. $#initial_INC);
+my $in_inc_skip;
+for (0.. $#initial_INC) {
+
+  my $path = shorten_fn( $initial_INC[$_] );
+
+  if (
+    @initial_INC < 11
+      or
+    $seen_initial_inc_indices->{$_}
+      or
+    ! $ENV{AUTOMATED_TESTING}
+      or
+    $path !~ m! ^ [~/] !x
+  ) {
+    $in_inc_skip = 0;
+    $final_out .= sprintf ( "% 3s: %s\n",
+      $_,
+      $path
+    );
+  }
+  elsif(! $in_inc_skip++) {
+    $final_out .= "  ...\n";
+  }
+}
 
 $final_out .= "\n";
 
