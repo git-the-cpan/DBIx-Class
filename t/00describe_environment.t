@@ -436,7 +436,7 @@ for (0.. $#initial_INC) {
       or
     ! -e $path
       or
-    ! File::Spec->file_name_is_absolute($_[0])
+    ! File::Spec->file_name_is_absolute($path)
   ) {
     $in_inc_skip = 0;
     $final_out .= sprintf ( "% 3s: %s\n",
