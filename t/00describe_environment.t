@@ -155,7 +155,7 @@ for my $k (keys %$known_paths) {
 
   delete $known_paths->{$k} unless $v->{abs_unix_path} and -d $v->{abs_unix_path};
 }
-my ($seen_known_markers, $seen_initial_inc_indices);
+my $seen_markers = {};
 
 # first run through lib/ and *try* to load anything we can find
 # within our own project
@@ -374,12 +374,7 @@ visit_namespaces( action => sub {
       )
     ) {
       $interesting_modules->{$pkg}{source_marker} = $marker;
-
-      $seen_known_markers->{$marker} = 1
-        if $known_paths->{$marker};
-
-      $seen_initial_inc_indices->{$initial_inc_idx} = 1
-        if defined $initial_inc_idx;
+      $seen_markers->{$marker} = 1;
     }
 
     # at this point only fill in the path (md5 calc) IFF it is interesting
@@ -408,7 +403,7 @@ my $max_ver_len = max map
   { length "$_" }
   ( 'xxx.yyyzzz_bbb', map { $_->{version} || '' } values %$interesting_modules )
 ;
-my $max_marker_len = max map { length $_ } ( '$INC[999]', keys %{ $seen_known_markers || {} } );
+my $max_marker_len = max map { length $_ } ( '$INC[999]', keys %$seen_markers );
 
 my $discl = <<'EOD';
 
@@ -431,14 +426,17 @@ for (0.. $#initial_INC) {
 
   my $path = shorten_fn( $initial_INC[$_] );
 
+  # when *to* print
   if (
-    @initial_INC < 11
-      or
-    $seen_initial_inc_indices->{$_}
-      or
     ! $ENV{AUTOMATED_TESTING}
       or
-    $path !~ m! ^ [~/] !x
+    @initial_INC < 11
+      or
+    $seen_markers->{"\$INC[$_]"}
+      or
+    ! -e $path
+      or
+    ! File::Spec->file_name_is_absolute($_[0])
   ) {
     $in_inc_skip = 0;
     $final_out .= sprintf ( "% 3s: %s\n",
@@ -453,7 +451,7 @@ for (0.. $#initial_INC) {
 
 $final_out .= "\n";
 
-if ($seen_known_markers) {
+if (my @seen_known_paths = grep { $known_paths->{$_} } keys %$seen_markers) {
 
   $final_out .= join "\n", 'Sourcing markers:', (map
     {
@@ -467,7 +465,7 @@ if ($seen_known_markers) {
           or
         ( $a->{marker}||'') cmp ($b->{marker}||'')
       }
-      @{$known_paths}{keys %$seen_known_markers}
+      @{$known_paths}{@seen_known_paths}
   ), '', '';
 
 }
@@ -548,7 +546,7 @@ sub shorten_fn {
     elsif ($p->{config_key}) {
       $abs_fn =~ s!\Q$p->{abs_unix_path}!<<$p->{marker}>>!
         and
-      $seen_known_markers->{$p->{marker}} = 1
+      $seen_markers->{$p->{marker}} = 1
         and
       return $abs_fn;
     }
