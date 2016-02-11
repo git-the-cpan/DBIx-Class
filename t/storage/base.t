@@ -10,13 +10,11 @@ use Data::Dumper;
 
 my $schema = DBICTest->init_schema( sqlite_use_file => 1 );
 
-my $storage = $schema->storage;
+is( ref($schema->storage), 'DBIx::Class::Storage::DBI::SQLite',
+    'Storage reblessed correctly into DBIx::Class::Storage::DBI::SQLite' );
 
-is(
-  ref($storage),
-  'DBIx::Class::Storage::DBI::SQLite',
-  'Storage reblessed correctly into DBIx::Class::Storage::DBI::SQLite'
-) unless $ENV{DBICTEST_VIA_REPLICATED};
+my $storage = $schema->storage;
+$storage->ensure_connected;
 
 throws_ok {
     $schema->storage->throw_exception('test_exception_42');

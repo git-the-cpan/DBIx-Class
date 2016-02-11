@@ -6,16 +6,7 @@ use warnings;
 
 use base 'DBIx::Class::Storage::Statistics';
 
-sub query_start {
-  my ($self, $sql, $bind) = @_;
-
-  my $op = ($sql =~ /^\s*(\S+)/)[0];
-
-  $sql =~ s/^ \s* \Q$op\E \s+ \[ .+? \]/$op/x
-    if $ENV{DBICTEST_VIA_REPLICATED};
-
-  push @{$self->{sqlbinds}}, [ $op, [ $sql, @{ $bind || [] } ] ];
-}
+sub query_start { push @{$_[0]{sqlbinds}}, [ ($_[1] =~ /^\s*(\S+)/)[0], [ $_[1], @{ $_[2]||[] } ] ] }
 
 # who the hell came up with this API >:(
 for my $txn (qw(begin rollback commit)) {

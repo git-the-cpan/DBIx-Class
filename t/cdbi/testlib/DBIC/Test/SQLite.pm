@@ -1,9 +1,6 @@
 package # hide from PAUSE
     DBIC::Test::SQLite;
 
-use strict;
-use warnings;
-
 =head1 NAME
 
 DBIx::Class::Test::SQLite - Base class for running Class::DBI tests against DBIx::Class compat layer, shamelessly ripped from Class::DBI::Test::SQLite
@@ -34,6 +31,11 @@ table, and tie it to the class.
 
 =cut
 
+use strict;
+use warnings;
+
+use Test::More;
+
 # adding implicit search criteria to the iterator will alter the test
 # mechanics - leave everything as-is instead, and hope SQLite won't
 # change too much
@@ -41,6 +43,11 @@ BEGIN { $ENV{DBIC_SHUFFLE_UNORDERED_RESULTSETS} = 0 }
 
 use lib 't/lib';
 use DBICTest;
+
+BEGIN {
+  eval { require DBIx::Class::CDBICompat }
+    or plan skip_all => 'Class::DBI required for this test';
+}
 
 use base qw/DBIx::Class/;
 

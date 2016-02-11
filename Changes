@@ -1,10 +1,16 @@
 Revision history for DBIx::Class
 
-0.082899_14 !!! EARLY ALPHA TEST OF t/00describe-environment !!! 2015-04-14 13:51 (UTC)
-                    !!! DO NOT INSTALL !!!
+0.082820_01 2016-02-11 08:25 (UTC)
+    * Fixes
+        - Fix t/52leaks.t failures on compilerless systems (RT#104429)
+        - Fix t/storage/quote_names.t failures on systems with specified Oracle
+          test credentials while missing the optional Math::Base36
+        - Fix test failures when DBICTEST_SYBASE_DSN is set (unnoticed change
+          in error message wording during 0.082800 and a bogus test)
+        - Remove largely obsolete test of SQLite view deployment (RT#111916)
 
     * Misc
-        - things
+        - Work around rare test deadlock under heavy parallelism (RT#108390)
 
 0.082820 2015-03-20 20:35 (UTC)
     * Fixes

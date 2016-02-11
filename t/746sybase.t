@@ -1,25 +1,33 @@
-use DBIx::Class::Optional::Dependencies -skip_all_without => 'test_rdbms_ase';
-
 use strict;
 use warnings;
 no warnings 'uninitialized';
 
 use Test::More;
 use Test::Exception;
+use DBIx::Class::Optional::Dependencies ();
 use lib qw(t/lib);
 use DBICTest;
+
+my ($dsn, $user, $pass) = @ENV{map { "DBICTEST_SYBASE_${_}" } qw/DSN USER PASS/};
+if (not ($dsn && $user)) {
+  plan skip_all => join ' ',
+    'Set $ENV{DBICTEST_SYBASE_DSN}, _USER and _PASS to run this test.',
+    'Warning: This test drops and creates the tables:',
+    "'artist', 'money_test' and 'bindtype_test'",
+  ;
+};
+
+plan skip_all => 'Test needs ' . DBIx::Class::Optional::Dependencies->req_missing_for ('test_rdbms_ase')
+  unless DBIx::Class::Optional::Dependencies->req_ok_for ('test_rdbms_ase');
 
 my @storage_types = (
   'DBI::Sybase::ASE',
   'DBI::Sybase::ASE::NoBindVars',
 );
-eval "require DBIx::Class::Storage::$_;" or die $@
-  for @storage_types;
+eval "require DBIx::Class::Storage::$_;" for @storage_types;
 
 my $schema;
 my $storage_idx = -1;
-
-my ($dsn, $user, $pass) = @ENV{map { "DBICTEST_SYBASE_${_}" } qw/DSN USER PASS/};
 
 sub get_schema {
   DBICTest::Schema->connect($dsn, $user, $pass, {
@@ -268,18 +276,23 @@ SQL
 
 # test invalid _insert_bulk (missing required column)
 #
-# There should be a rollback, reconnect and the next valid _insert_bulk should
-# succeed.
   throws_ok {
     $schema->resultset('Artist')->populate([
       {
         charfield => 'foo',
       }
     ]);
-  } qr/no value or default|does not allow null|placeholders/i,
+  }
 # The second pattern is the error from fallback to regular array insert on
 # incompatible charset.
 # The third is for ::NoBindVars with no syb_has_blk.
+  qr/
+    \Qno value or default\E
+      |
+    \Qdoes not allow null\E
+      |
+    \QUnable to invoke fast-path insert without storage placeholder support\E
+  /xi,
   '_insert_bulk with missing required column throws error';
 
 # now test _insert_bulk with IDENTITY_INSERT

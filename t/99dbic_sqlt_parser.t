@@ -1,9 +1,5 @@
-use DBIx::Class::Optional::Dependencies -skip_all_without => 'deploy';
-
 use strict;
 use warnings;
-
-BEGIN { $ENV{DBICTEST_VIA_REPLICATED} = 0 }
 
 use Test::More;
 use Test::Warn;
@@ -13,6 +9,13 @@ use Scalar::Util ();
 use lib qw(t/lib);
 use DBICTest;
 use DBIx::Class::_Util 'sigwarn_silencer';
+
+BEGIN {
+  require DBIx::Class;
+  plan skip_all =>
+      'Test needs ' . DBIx::Class::Optional::Dependencies->req_missing_for ('deploy')
+    unless DBIx::Class::Optional::Dependencies->req_ok_for ('deploy')
+}
 
 # Test for SQLT-related leaks
 {
@@ -50,7 +53,8 @@ lives_ok { isa_ok (create_schema ({ schema => 'DBICTest::Schema' }), 'SQL::Trans
 # make sure a connected instance passed via $args does not get the $dbh improperly serialized
 SKIP: {
 
-  DBIx::Class::Optional::Dependencies->skip_without( 'YAML>=0' );
+  # YAML is a build_requires dep of SQLT - it may or may not be here
+  eval { require YAML } or skip "Test requires YAML.pm", 1;
 
   lives_ok {
 

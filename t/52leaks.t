@@ -55,8 +55,7 @@ my $weak_registry = {};
 my $has_dt;
 
 # Skip the heavy-duty leak tracing when just doing an install
-# or when having Moose crap all over everything
-if ( !$ENV{DBICTEST_VIA_REPLICATED} and !DBICTest::RunMode->is_plain ) {
+unless (DBICTest::RunMode->is_plain) {
 
   # redefine the bless override so that we can catch each and every object created
   no warnings qw/redefine once/;
@@ -99,7 +98,7 @@ if ( !$ENV{DBICTEST_VIA_REPLICATED} and !DBICTest::RunMode->is_plain ) {
   # Load them and empty the registry
 
   # this loads the DT armada
-  $has_dt = DBIx::Class::Optional::Dependencies->req_ok_for([qw( test_rdbms_sqlite icdt )]);
+  $has_dt = DBIx::Class::Optional::Dependencies->req_ok_for('test_dt_sqlite');
 
   require Errno;
   require DBI;
@@ -116,6 +115,8 @@ if ( !$ENV{DBICTEST_VIA_REPLICATED} and !DBICTest::RunMode->is_plain ) {
   my $schema = DBICTest->init_schema;
   my $rs = $schema->resultset ('Artist');
   my $storage = $schema->storage;
+
+  ok ($storage->connected, 'we are connected');
 
   my $row_obj = $rs->search({}, { rows => 1})->next;  # so that commits/rollbacks work
   ok ($row_obj, 'row from db');
@@ -446,6 +447,14 @@ for my $addr (keys %$weak_registry) {
     delete $weak_registry->{$addr}
       unless $cleared->{hash_merge_singleton}{$weak_registry->{$addr}{weakref}{behavior}}++;
   }
+  elsif ($names =~ /^B::Hooks::EndOfScope::PP::_TieHintHashFieldHash/m) {
+    # there is one tied lexical which stays alive until GC time
+    # https://metacpan.org/source/ETHER/B-Hooks-EndOfScope-0.15/lib/B/Hooks/EndOfScope/PP/FieldHash.pm#L24
+    # simply ignore it here, instead of teaching the leaktracer to examine ties
+    # the latter is possible yet terrible: https://github.com/dbsrgits/dbix-class/blob/v0.082820/t/lib/DBICTest/Util/LeakTracer.pm#L113-L117
+    delete $weak_registry->{$addr}
+      unless $cleared->{bheos_pptiehinthashfieldhash}++;
+  }
   elsif ($names =~ /^DateTime::TimeZone::UTC/m) {
     # DT is going through a refactor it seems - let it leak zones for now
     delete $weak_registry->{$addr};
@@ -511,12 +520,6 @@ assert_empty_weakregistry ($weak_registry);
 # this is ugly and dirty but we do not yet have a Test::Embedded or
 # similar
 
-# set up -I
-require Config;
-$ENV{PERL5LIB} = join ($Config::Config{path_sep}, @INC);
-($ENV{PATH}) = $ENV{PATH} =~ /(.+)/;
-
-
 my $persistence_tests;
 SKIP: {
   skip 'Test already in a persistent loop', 1
@@ -547,7 +550,17 @@ SKIP: {
     @{$persistence_tests->{PPerl}{cmd}}[ 1 .. $#{$persistence_tests->{PPerl}{cmd}} ],
   ];
 
-  require IPC::Open2;
+  # set up -I
+  require Config;
+  $ENV{PERL5LIB} = join ($Config::Config{path_sep}, @INC);
+
+  # adjust PATH for -T
+  if (length $ENV{PATH}) {
+    ( $ENV{PATH} ) = join ( $Config::Config{path_sep},
+      map { length($_) ? File::Spec->rel2abs($_) : () }
+        split /\Q$Config::Config{path_sep}/, $ENV{PATH}
+    ) =~ /\A(.+)\z/;
+  }
 
   for my $type (keys %$persistence_tests) { SKIP: {
     unless (eval "require $type") {
@@ -568,6 +581,8 @@ SKIP: {
       skip "Something is wrong with $type ($!)", 1
         if system(@cmd);
     }
+
+    require IPC::Open2;
 
     for (1,2,3) {
       note ("Starting run in persistent env ($type pass $_)");

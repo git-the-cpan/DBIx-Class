@@ -3,13 +3,7 @@ use warnings;
 
 use 5.008001;
 use inc::Module::Install 1.06;
-BEGIN {
-  # needs to happen early for old EUMM
-  makemaker_args( NORECURS => 1 );
-
-  local @INC = ('lib', @INC);
-  require DBIx::Class::Optional::Dependencies;
-}
+BEGIN { makemaker_args( NORECURS => 1 ) } # needs to happen early for old EUMM
 
 ##
 ## DO NOT USE THIS HACK IN YOUR DISTS!!! (it makes #toolchain sad)
@@ -87,48 +81,43 @@ my $test_requires = {
   'Test::Warn'               => '0.21',
   'Test::More'               => '0.94',
 
+  # needed for testing only, not for operation
+  # we will move away from this dep eventually, perhaps to DBD::CSV or something
+###
+### IMPORTANT - do not raise this dependency
+### even though many bugfixes are present in newer versions, the general DBIC
+### rule is to bend over backwards for available DBDs (given upgrading them is
+### often *not* easy or even possible)
+###
+  'DBD::SQLite'              => '1.29',
+
   # this is already a dep of n::c, but just in case - used by t/55namespaces_cleaned.t
   # remove and do a manual glob-collection if n::c is no longer a dep
   'Package::Stash'           => '0.28',
-
-  # needed for testing only, not for operation
-  # we will move away from this dep eventually, perhaps to DBD::CSV or something
-  %{ DBIx::Class::Optional::Dependencies->req_list_for('test_rdbms_sqlite') },
 };
 
-# if the user has some of these env vars set and the deps are not available,
-# tests will fail
-# Note - these are added as test_requires *directly*, so they get properly
+# if the user has this env var set and no SQLT installed, tests will fail
+# Note - this is added as test_requires *directly*, so it gets properly
 # excluded on META.yml cleansing (even though no dist can be created from this)
-# we force these reqs regarless of author_deps, worst case scenario they will
+# we force this req regarless of author_deps, worst case scenario it will
 # be specified twice
 #
-# also note that we *do* set dynamic_config => 0, as these are the only things
-# that we determine dynamically, and in all fairness if someone sets these
-# envvars *and* is not running a full Makefile/make/maketest cycle - they get
+# also note that we *do* set dynamic_config => 0, as this is the only thing
+# that we determine dynamically, and in all fairness if someone sets the
+# envvar *and* is not running a full Makefile/make/maketest cycle - they get
 # to keep the pieces
-if ( my @optdeps = (
-  $ENV{DBICTEST_SQLT_DEPLOY} ? 'deploy' : (),
-  $ENV{DBICTEST_VIA_REPLICATED} ? 'replicated' : (),
-)) {
-  my $extra_deps = DBIx::Class::Optional::Dependencies->req_list_for(\@optdeps);
-  for (keys %$extra_deps) {
-    test_requires ($_ => $extra_deps->{$_})
+if ($ENV{DBICTEST_SQLT_DEPLOY}) {
+  local @INC = ('lib', @INC);
+  require DBIx::Class::Optional::Dependencies;
+  my $dep_req = DBIx::Class::Optional::Dependencies->req_list_for('deploy');
+  for (keys %$dep_req) {
+    test_requires ($_ => $dep_req->{$_})
   }
 }
 
-tests_recursive (
-  't',
-  ( (
-    $Module::Install::AUTHOR
-      or
-    $ENV{DBICTEST_RUN_ALL_TESTS}
-      or
-    ( $ENV{TRAVIS}||'' ) eq 'true'
-      or
-    ( $ENV{AUTOMATED_TESTING} and ! $ENV{PERL5_CPANM_IS_RUNNING} and ! $ENV{RELEASE_TESTING} )
-  ) ? 'xt' : () ),
-);
+tests_recursive (qw|
+    t
+|);
 
 install_script (qw|
     script/dbicadmin

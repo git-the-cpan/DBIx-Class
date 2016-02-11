@@ -13,6 +13,18 @@ BEGIN {
 
     die __PACKAGE__ . " must be loaded before DBIx::Class (or modules using DBIx::Class) at $frame[1] line $frame[2]\n";
   }
+
+  if ( $ENV{DBICTEST_VERSION_WARNS_INDISCRIMINATELY} ) {
+    my $ov = UNIVERSAL->can("VERSION");
+
+    require Carp;
+
+    no warnings 'redefine';
+    *UNIVERSAL::VERSION = sub {
+      Carp::carp( 'Argument "blah bleh bloh" isn\'t numeric in subroutine entry' );
+      &$ov;
+    };
+  }
 }
 
 use Path::Class qw/file dir/;
@@ -198,7 +210,7 @@ sub is_author {
 
 sub is_smoker {
   return
-    __PACKAGE__->is_ci
+    ( ($ENV{TRAVIS}||'') eq 'true' and ($ENV{TRAVIS_REPO_SLUG}||'') eq 'dbsrgits/dbix-class' )
       ||
     ( $ENV{AUTOMATED_TESTING} && ! $ENV{PERL5_CPANM_IS_RUNNING} && ! $ENV{RELEASE_TESTING} )
   ;
@@ -208,7 +220,7 @@ sub is_ci {
   return (
     ($ENV{TRAVIS}||'') eq 'true'
       and
-    ($ENV{TRAVIS_REPO_SLUG}||'') eq 'dbsrgits/dbix-class'
+    ($ENV{TRAVIS_REPO_SLUG}||'') =~ m|\w+/dbix-class$|
   )
 }
 

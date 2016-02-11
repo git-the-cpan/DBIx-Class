@@ -13,9 +13,9 @@ lives_ok {
   is($schema->resultset("Artist")->search(), 3, "Three artists returned");
 } 'Custom cursor autoloaded';
 
-# test component_class reentrancy
 SKIP: {
-  DBIx::Class::Optional::Dependencies->skip_without( 'Class::Unload>=0.07' );
+  eval { require Class::Unload }
+    or skip 'component_class reentrancy test requires Class::Unload', 1;
 
   Class::Unload->unload('DBICTest::Cursor');
 

@@ -17,13 +17,78 @@ BEGIN {
   }
 }
 
+use constant DEBUG_TEST_CONCURRENCY_LOCKS =>
+  ( ($ENV{DBICTEST_DEBUG_CONCURRENCY_LOCKS}||'') =~ /^(\d+)$/ )[0]
+    ||
+  0
+;
+
 use Config;
 use Carp 'confess';
+use Fcntl ':flock';
 use Scalar::Util qw(blessed refaddr);
 use DBIx::Class::_Util;
 
 use base 'Exporter';
-our @EXPORT_OK = qw(local_umask stacktrace check_customcond_args visit_namespaces);
+our @EXPORT_OK = qw(
+  dbg stacktrace
+  local_umask
+  visit_namespaces
+  check_customcond_args
+  await_flock DEBUG_TEST_CONCURRENCY_LOCKS
+);
+
+if (DEBUG_TEST_CONCURRENCY_LOCKS) {
+  require DBI;
+  my $oc = DBI->can('connect');
+  no warnings 'redefine';
+  *DBI::connect = sub {
+    DBICTest::Util::dbg("Connecting to $_[1]");
+    goto $oc;
+  }
+}
+
+sub dbg ($) {
+  require Time::HiRes;
+  printf STDERR "\n%.06f  %5s %-78s %s\n",
+    scalar Time::HiRes::time(),
+    $$,
+    $_[0],
+    $0,
+  ;
+}
+
+# File locking is hard. Really hard. By far the best lock implementation
+# I've seen is part of the guts of File::Temp. However it is sadly not
+# reusable. Since I am not aware of folks doing NFS parallel testing,
+# nor are we known to work on VMS, I am just going to punt this and
+# use the portable-ish flock() provided by perl itself. If this does
+# not work for you - patches more than welcome.
+#
+# This figure esentially means "how long can a single test hold a
+# resource before everyone else gives up waiting and aborts" or
+# in other words "how long does the longest test-group legitimally run?"
+my $lock_timeout_minutes = 15;  # yes, that's long, I know
+my $wait_step_seconds = 0.25;
+
+sub await_flock ($$) {
+  my ($fh, $locktype) = @_;
+
+  my ($res, $tries);
+  while(
+    ! ( $res = flock( $fh, $locktype | LOCK_NB ) )
+      and
+    ++$tries <= $lock_timeout_minutes * 60 / $wait_step_seconds
+  ) {
+    select( undef, undef, undef, $wait_step_seconds );
+
+    # "say something" every 10 cycles to work around RT#108390
+    # jesus christ our tooling is such a crock of shit :(
+    print "#\n" if not $tries % 10;
+  }
+
+  return $res;
+}
 
 sub local_umask {
   return unless defined $Config{d_umask};

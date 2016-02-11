@@ -4,6 +4,7 @@ use warnings;
 use Test::More;
 use lib qw(t/lib);
 use DBICTest;
+use Storable qw/dclone/;
 
 my $schema = DBICTest->init_schema();
 
@@ -69,14 +70,12 @@ $it = $rs->search(
   { order_by => 'title',
     rows => 3 }
 );
+my $page = $it->page(2);
 
-{
-  my $page = $it->page(2);
+is( $page->count, 2, "standard resultset paged rs count ok" );
 
-  is( $page->count, 2, "standard resultset paged rs count ok" );
+is( $page->next->title, "Generic Manufactured Singles", "second page of standard resultset ok" );
 
-  is( $page->next->title, "Generic Manufactured Singles", "second page of standard resultset ok" );
-}
 
 # test software-based limit paging
 $it = $rs->search(
@@ -198,11 +197,7 @@ $it = $rs->search(
 $pager = $it->pager;
 is ($qcnt, 0, 'No queries on rs/pager creation');
 
-# test *requires* it to be Storable
-$it = do {
-  local $DBIx::Class::ResultSourceHandle::thaw_schema = $schema;
-  Storable::dclone ($it);
-};
+$it = do { local $DBIx::Class::ResultSourceHandle::thaw_schema = $schema; dclone ($it) };
 is ($qcnt, 0, 'No queries on rs/pager freeze/thaw');
 
 is( $it->pager->entries_on_this_page, 1, "entries_on_this_page ok for page 2" );
@@ -212,11 +207,7 @@ is ($qcnt, 1, 'Count fired to get pager page entries');
 $rs->create({ title => 'bah', artist => 1, year => 2011 });
 
 $qcnt = 0;
-# test *requires* it to be Storable
-$it = do {
-  local $DBIx::Class::ResultSourceHandle::thaw_schema = $schema;
-  Storable::dclone ($it);
-};
+$it = do { local $DBIx::Class::ResultSourceHandle::thaw_schema = $schema; dclone ($it) };
 is ($qcnt, 0, 'No queries on rs/pager freeze/thaw');
 
 is( $it->pager->entries_on_this_page, 1, "entries_on_this_page ok for page 2, even though underlying count changed" );

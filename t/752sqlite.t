@@ -11,6 +11,10 @@ use lib qw(t/lib);
 use DBICTest;
 use DBIx::Class::_Util qw( sigwarn_silencer modver_gt_or_eq modver_gt_or_eq_and_lt );
 
+# make one deploy() round before we load anything else - need this in order
+# to prime SQLT if we are using it (deep depchain is deep)
+DBICTest->init_schema( no_populate => 1 );
+
 # check that we work somewhat OK with braindead SQLite transaction handling
 #
 # As per https://metacpan.org/source/ADAMK/DBD-SQLite-1.37/lib/DBD/SQLite.pm#L921
@@ -18,8 +22,6 @@ use DBIx::Class::_Util qw( sigwarn_silencer modver_gt_or_eq modver_gt_or_eq_and_
 #
 # However DBD::SQLite 1.38_02 seems to fix this, with an accompanying test:
 # https://metacpan.org/source/ADAMK/DBD-SQLite-1.38_02/t/54_literal_txn.t
-
-require DBD::SQLite;
 my $lit_txn_todo = modver_gt_or_eq('DBD::SQLite', '1.38_02')
   ? undef
   : "DBD::SQLite before 1.38_02 is retarded wrt detecting literal BEGIN/COMMIT statements"
@@ -147,7 +149,7 @@ is ($row->rank, 'abc', 'proper rank inserted into database');
 SKIP: {
 
 skip "Not testing bigint handling on known broken DBD::SQLite trial versions", 1
-  if modver_gt_or_eq_and_lt( 'DBD::SQLite', '1.45', '1.45_03' );
+  if( modver_gt_or_eq('DBD::SQLite', '1.45') and ! modver_gt_or_eq('DBD::SQLite', '1.45_03') );
 
 {
   package DBICTest::BigIntArtist;
@@ -179,7 +181,6 @@ for my $bi ( qw(
   1
   2
 
-  -9223372036854775808
   -9223372036854775807
   -8694837494948124658
   -6848440844435891639
@@ -214,6 +215,15 @@ for my $bi ( qw(
   $sqlite_broken_bigint
     ? ()
     : ( '2147483648', '2147483649' )
+  ,
+
+  # with newer compilers ( gcc 4.9+ ) older DBD::SQLite does not
+  # play well with the "Most Negative Number"
+  modver_gt_or_eq( 'DBD::SQLite', '1.33' )
+    ? ( '-9223372036854775808' )
+    : ()
+  ,
+
 ) {
   # unsigned 32 bit ints have a range of −2,147,483,648 to 2,147,483,647
   # alternatively expressed as the hexadecimal numbers below
@@ -245,7 +255,7 @@ for my $bi ( qw(
   eval {
     $row = $schema->resultset('BigIntArtist')->create({ bigint => $bi });
   } or do {
-    fail("Exception on inserting $v_desc") unless $sqlite_broken_bigint;
+    fail("Exception on inserting $v_desc: $@") unless $sqlite_broken_bigint;
     next;
   };
 
@@ -270,6 +280,11 @@ for my $bi ( qw(
 
     "value in database correct ($v_desc)"
   );
+
+# FIXME - temporary smoke-only escape
+SKIP: {
+  skip 'Potential for false negatives - investigation pending', 1
+    if DBICTest::RunMode->is_plain;
 
   # check if math works
   # start by adding/subtracting a 50 bit integer, and then divide by 2 for good measure
@@ -304,6 +319,8 @@ for my $bi ( qw(
     , "simple integer math with@{[ $dtype ? '' : 'out' ]} bindtype in database correct (base $v_desc)")
       or diag sprintf '%s != %s', $row->bigint, $expect;
   }
+# end of fixme
+}
 
   is_deeply (\@w, [], "No mismatch warnings on bigint operations ($v_desc)" );
 

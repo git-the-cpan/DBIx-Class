@@ -7,9 +7,8 @@ use base qw(DBICTest::Base DBIx::Class::Schema);
 
 use Fcntl qw(:DEFAULT :seek :flock);
 use Time::HiRes 'sleep';
-use Scope::Guard ();
 use DBICTest::Util::LeakTracer qw(populate_weakregistry assert_empty_weakregistry);
-use DBICTest::Util 'local_umask';
+use DBICTest::Util qw( local_umask await_flock dbg DEBUG_TEST_CONCURRENCY_LOCKS );
 use namespace::clean;
 
 sub capture_executed_sql_bind {
@@ -24,20 +23,10 @@ sub capture_executed_sql_bind {
   local *DBIx::Class::Storage::DBI::_format_for_trace = sub { $_[1] };
   Class::C3->reinitialize if DBIx::Class::_ENV_::OLD_MRO;
 
-  # can not use local() due to an unknown number of storages
-  # (think replicated)
-  my $orig_states = { map
-    { $_ => $self->storage->$_ }
-    qw(debugcb debugobj debug)
-  };
 
-  my $sg = Scope::Guard->new(sub {
-    $self->storage->$_ ( $orig_states->{$_} ) for keys %$orig_states;
-  });
-
-  $self->storage->debugcb(undef);
-  $self->storage->debugobj( my $tracer_obj = DBICTest::SQLTracerObj->new );
-  $self->storage->debug(1);
+  local $self->storage->{debugcb};
+  local $self->storage->{debugobj} = my $tracer_obj = DBICTest::SQLTracerObj->new;
+  local $self->storage->{debug} = 1;
 
   local $Test::Builder::Level = $Test::Builder::Level + 2;
   $cref->();
@@ -119,7 +108,8 @@ our $locker;
 END {
   # we need the $locker to be referenced here for delayed destruction
   if ($locker->{lock_name} and ($ENV{DBICTEST_LOCK_HOLDER}||0) == $$) {
-    #warn "$$ $0 $locker->{type} LOCK RELEASED";
+    DEBUG_TEST_CONCURRENCY_LOCKS
+      and dbg "$locker->{type} LOCK RELEASED (END): $locker->{lock_name}";
   }
 }
 
@@ -150,13 +140,6 @@ sub connection {
   # an envvar, we can not detect when a user invokes prove -jN. Hence
   # perform the locking at all times, it shouldn't hurt.
   # the lock fh *should* inherit across forks/subprocesses
-  #
-  # File locking is hard. Really hard. By far the best lock implementation
-  # I've seen is part of the guts of File::Temp. However it is sadly not
-  # reusable. Since I am not aware of folks doing NFS parallel testing,
-  # nor are we known to work on VMS, I am just going to punt this and
-  # use the portable-ish flock() provided by perl itself. If this does
-  # not work for you - patches more than welcome.
   if (
     ! $DBICTest::global_exclusive_lock
       and
@@ -167,28 +150,28 @@ sub connection {
     ($_[0]||'') !~ /^ (?i:dbi) \: SQLite \: (?: dbname\= )? (?: \:memory\: | t [\/\\] var [\/\\] DBIxClass\-) /x
   ) {
 
-    my $locktype = do {
+    my $locktype;
+
+    {
       # guard against infinite recursion
       local $ENV{DBICTEST_LOCK_HOLDER} = -1;
 
-      # we need to connect a forced fresh clone so that we do not upset any state
+      # we need to work with a forced fresh clone so that we do not upset any state
       # of the main $schema (some tests examine it quite closely)
       local $SIG{__WARN__} = sub {};
       local $@;
-      my $storage = eval {
-        my $st = ref($self)->connect(@{$self->storage->connect_info})->storage;
-        $st->ensure_connected;  # do connect here, to catch a possible throw
-        $st;
+
+      # this will either give us an undef $locktype or will determine things
+      # properly with a default ( possibly connecting in the process )
+      eval {
+        my $s = ref($self)->connect(@{$self->storage->connect_info})->storage;
+
+        $locktype = $s->sqlt_type || 'generic';
+
+        # in case sqlt_type did connect, doesn't matter if it fails or something
+        $s->disconnect;
       };
-      $storage
-        ? do {
-          my $t = $storage->sqlt_type || 'generic';
-          eval { $storage->disconnect };
-          $t;
-        }
-        : undef
-      ;
-    };
+    }
 
     # Never hold more than one lock. This solves the "lock in order" issues
     # unrelated tests may have
@@ -197,18 +180,27 @@ sub connection {
 
       # this will release whatever lock we may currently be holding
       # which is fine since the type does not match as checked above
+      DEBUG_TEST_CONCURRENCY_LOCKS
+        and $locker
+        and dbg "$locker->{type} LOCK RELEASED (UNDEF): $locker->{lock_name}";
+
       undef $locker;
 
       my $lockpath = DBICTest::RunMode->tmpdir->file("_dbictest_$locktype.lock");
 
-      #warn "$$ $0 $locktype GRABBING LOCK";
+      DEBUG_TEST_CONCURRENCY_LOCKS
+        and dbg "Waiting for $locktype LOCK: $lockpath...";
+
       my $lock_fh;
       {
         my $u = local_umask(0); # so that the file opens as 666, and any user can lock
         sysopen ($lock_fh, $lockpath, O_RDWR|O_CREAT) or die "Unable to open $lockpath: $!";
       }
-      flock ($lock_fh, LOCK_EX) or die "Unable to lock $lockpath: $!";
-      #warn "$$ $0 $locktype LOCK GRABBED";
+
+      await_flock ($lock_fh, LOCK_EX) or die "Unable to lock $lockpath: $!";
+
+      DEBUG_TEST_CONCURRENCY_LOCKS
+        and dbg "Got $locktype LOCK: $lockpath";
 
       # see if anyone was holding a lock before us, and wait up to 5 seconds for them to terminate
       # if we do not do this we may end up trampling over some long-running END or somesuch
@@ -219,12 +211,17 @@ sub connection {
           and
         ($old_pid) = $old_pid =~ /^(\d+)$/
       ) {
+        DEBUG_TEST_CONCURRENCY_LOCKS
+          and dbg "Post-grab WAIT for $old_pid START: $lockpath";
+
         for (1..50) {
           kill (0, $old_pid) or last;
           sleep 0.1;
         }
+
+        DEBUG_TEST_CONCURRENCY_LOCKS
+          and dbg "Post-grab WAIT for $old_pid FINISHED: $lockpath";
       }
-      #warn "$$ $0 $locktype POST GRAB WAIT";
 
       truncate $lock_fh, 0;
       seek ($lock_fh, 0, SEEK_SET) or die "seek failed $!";
@@ -268,10 +265,7 @@ sub clone {
 }
 
 END {
-  # Make sure we run after any cleanup in other END blocks
-  push @{ B::end_av()->object_2svref }, sub {
-    assert_empty_weakregistry($weak_registry, 'quiet');
-  };
+  assert_empty_weakregistry($weak_registry, 'quiet');
 }
 
 1;

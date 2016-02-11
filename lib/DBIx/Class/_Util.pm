@@ -21,8 +21,7 @@ BEGIN {
 
     HAS_ITHREADS => $Config{useithreads} ? 1 : 0,
 
-    # ::Runmode would only be loaded by DBICTest, which in turn implies t/
-    DBICTEST => eval { DBICTest::RunMode->is_author } ? 1 : 0,
+    DBICTEST => $INC{"DBICTest/Util.pm"} ? 1 : 0,
 
     # During 5.13 dev cycle HELEMs started to leak on copy
     # add an escape for these perls ON SMOKERS - a user will still get death
@@ -35,8 +34,6 @@ BEGIN {
     ASSERT_NO_INTERNAL_INDIRECT_CALLS => $ENV{DBIC_ASSERT_NO_INTERNAL_INDIRECT_CALLS} ? 1 : 0,
 
     STRESSTEST_UTF8_UPGRADE_GENERATED_COLLAPSER_SOURCE => $ENV{DBIC_STRESSTEST_UTF8_UPGRADE_GENERATED_COLLAPSER_SOURCE} ? 1 : 0,
-
-    STRESSTEST_COLUMN_INFO_UNAWARE_STORAGE => $ENV{DBIC_STRESSTEST_COLUMN_INFO_UNAWARE_STORAGE} ? 1 : 0,
 
     IV_SIZE => $Config{ivsize},
 
@@ -64,15 +61,12 @@ use Scalar::Util qw(weaken blessed reftype refaddr);
 use List::Util qw(first);
 use Sub::Quote qw(qsub quote_sub);
 
-# Already correctly prototyped: perlbrew exec perl -MStorable -e 'warn prototype \&Storable::dclone'
-BEGIN { *deep_clone = \&Storable::dclone }
-
 use base 'Exporter';
 our @EXPORT_OK = qw(
   sigwarn_silencer modver_gt_or_eq modver_gt_or_eq_and_lt
   fail_on_internal_wantarray fail_on_internal_call
   refdesc refcount hrefaddr is_exception detected_reinvoked_destructor
-  quote_sub qsub perlstring serialize deep_clone
+  quote_sub qsub perlstring serialize
   UNRESOLVABLE_CONDITION
 );
 

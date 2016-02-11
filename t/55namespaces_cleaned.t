@@ -37,6 +37,12 @@ use Test::More;
 
 use lib 't/lib';
 
+BEGIN {
+  require DBICTest::RunMode;
+  plan( skip_all => "Skipping test on plain module install" )
+    if DBICTest::RunMode->is_plain;
+}
+
 use DBICTest;
 use File::Find;
 use File::Spec;
@@ -81,7 +87,6 @@ my $skip_idx = { map { $_ => 1 } (
   'DBIx::Class::ResultSet::Pager',
 
   # utility classes, not part of the inheritance chain
-  'DBIx::Class::Optional::Dependencies',
   'DBIx::Class::ResultSource::RowParser::Util',
   'DBIx::Class::_Util',
 ) };
@@ -185,7 +190,7 @@ for my $mod (@modules) {
 sub find_modules {
   my @modules;
 
-  find({
+  find( {
     wanted => sub {
       -f $_ or return;
       s/\.pm$// or return;
@@ -193,7 +198,12 @@ sub find_modules {
       push @modules, join ('::', File::Spec->splitdir($_));
     },
     no_chdir => 1,
-  }, (-e 'blib' ? 'blib' : 'lib') );
+  }, (
+    # find them in both lib and blib, duplicates are fine, since
+    # @INC is preadjusted for us by the harness
+    'lib',
+    ( -e 'blib' ? 'blib' : () ),
+  ));
 
   return sort @modules;
 }

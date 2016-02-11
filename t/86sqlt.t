@@ -1,14 +1,19 @@
-use DBIx::Class::Optional::Dependencies -skip_all_without => 'deploy';
-
 use strict;
 use warnings;
 
 use Test::More;
 use Test::Warn;
-use Scalar::Util 'blessed';
-
 use lib qw(t/lib);
 use DBICTest;
+
+use Scalar::Util 'blessed';
+
+BEGIN {
+  require DBIx::Class;
+  plan skip_all =>
+      'Test needs ' . DBIx::Class::Optional::Dependencies->req_missing_for ('deploy')
+    unless DBIx::Class::Optional::Dependencies->req_ok_for ('deploy')
+}
 
 my $custom_deployment_statements_called = 0;
 
@@ -17,6 +22,7 @@ sub DBICTest::Schema::deployment_statements {
   my $self = shift;
   return $self->next::method(@_);
 }
+
 
 # Check deployment statements ctx sensitivity
 {

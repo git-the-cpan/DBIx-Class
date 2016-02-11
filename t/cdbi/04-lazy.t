@@ -1,8 +1,5 @@
-use DBIx::Class::Optional::Dependencies -skip_all_without => 'cdbicompat';
-
 use strict;
 use warnings;
-
 use Test::More;
 use Test::Warn;
 
@@ -10,8 +7,10 @@ use Test::Warn;
 # Test lazy loading
 #----------------------------------------------------------------------
 
-use lib 't/cdbi/testlib';
-use Lazy;
+INIT {
+  use lib 't/cdbi/testlib';
+  use Lazy;
+}
 
 is_deeply [ Lazy->columns('Primary') ],        [qw/this/],      "Pri";
 is_deeply [ sort Lazy->columns('Essential') ], [qw/opop this/], "Essential";
@@ -110,7 +109,7 @@ warning_like {
 
 # Now again for inflated values
 SKIP: {
-    DBIx::Class::Optional::Dependencies->skip_without( 'Date::Simple>=3.03' );
+    skip "Requires Date::Simple 3.03", 5 unless eval "use Date::Simple 3.03; 1; ";
     Lazy->has_a(
         orp     => 'Date::Simple',
         inflate => sub { Date::Simple->new($_[0] . '-01-01') },

@@ -1,17 +1,15 @@
-use DBIx::Class::Optional::Dependencies -skip_all_without => 'cdbicompat';
-
 use strict;
 use warnings;
-
 use Test::More;
+use Class::Inspector ();
+
 
 use lib 't/cdbi/testlib';
 use Director;
 
-# Test that has_many() will load the foreign class
-require Class::Inspector;
+# Test that has_many() will load the foreign class.
 ok !Class::Inspector->loaded( 'Film' );
-ok eval { Director->has_many( films => 'Film' ); 1; } or diag $@;
+ok eval { Director->has_many( films => 'Film' ); 1; } || diag $@;
 
 my $shan_hua = Director->create({
     Name    => "Shan Hua",

@@ -1110,16 +1110,10 @@ sub get_dbms_capability {
 sub _server_info {
   my $self = shift;
 
-  # FIXME - ideally this needs to be an ||= assignment, and the final
-  # assignment at the end of this do{} should be gone entirely. However
-  # this confuses CXSA: https://rt.cpan.org/Ticket/Display.html?id=103296
-  $self->_dbh_details->{info} || do {
+  my $info;
+  unless ($info = $self->_dbh_details->{info}) {
 
-    # this guarantees that problematic conninfo won't be hidden
-    # by the try{} below
-    $self->ensure_connected;
-
-    my $info = {};
+    $info = {};
 
     my $server_version = try {
       $self->_get_server_version
@@ -1156,7 +1150,9 @@ sub _server_info {
     }
 
     $self->_dbh_details->{info} = $info;
-  };
+  }
+
+  return $info;
 }
 
 sub _get_server_version {
@@ -1375,40 +1371,24 @@ sub _warn_undetermined_driver {
 }
 
 sub _do_connection_actions {
-  my ($self, $method_prefix, $call, @args) = @_;
+  my $self          = shift;
+  my $method_prefix = shift;
+  my $call          = shift;
 
-  try {
-    if (not ref($call)) {
-      my $method = $method_prefix . $call;
-      $self->$method(@args);
+  if (not ref($call)) {
+    my $method = $method_prefix . $call;
+    $self->$method(@_);
+  } elsif (ref($call) eq 'CODE') {
+    $self->$call(@_);
+  } elsif (ref($call) eq 'ARRAY') {
+    if (ref($call->[0]) ne 'ARRAY') {
+      $self->_do_connection_actions($method_prefix, $_) for @$call;
+    } else {
+      $self->_do_connection_actions($method_prefix, @$_) for @$call;
     }
-    elsif (ref($call) eq 'CODE') {
-      $self->$call(@args);
-    }
-    elsif (ref($call) eq 'ARRAY') {
-      if (ref($call->[0]) ne 'ARRAY') {
-        $self->_do_connection_actions($method_prefix, $_) for @$call;
-      }
-      else {
-        $self->_do_connection_actions($method_prefix, @$_) for @$call;
-      }
-    }
-    else {
-      $self->throw_exception (sprintf ("Don't know how to process conection actions of type '%s'", ref($call)) );
-    }
+  } else {
+    $self->throw_exception (sprintf ("Don't know how to process conection actions of type '%s'", ref($call)) );
   }
-  catch {
-    if ( $method_prefix =~ /^connect/ ) {
-      # this is an on_connect cycle - we can't just throw while leaving
-      # a handle in an undefined state in our storage object
-      # kill it with fire and rethrow
-      $self->_dbh(undef);
-      $self->throw_exception( $_[0] );
-    }
-    else {
-      carp "Disconnect action failed: $_[0]";
-    }
-  };
 
   return $self;
 }
@@ -1795,28 +1775,31 @@ sub _query_end {
 }
 
 sub _dbi_attrs_for_bind {
-  #my ($self, $ident, $bind) = @_;
+  my ($self, $ident, $bind) = @_;
 
-  return [ map {
+  my @attrs;
 
-    exists $_->{dbd_attrs}  ?  $_->{dbd_attrs}
+  for (map { $_->[0] } @$bind) {
+    push @attrs, do {
+      if (exists $_->{dbd_attrs}) {
+        $_->{dbd_attrs}
+      }
+      elsif($_->{sqlt_datatype}) {
+        # cache the result in the dbh_details hash, as it can not change unless
+        # we connect to something else
+        my $cache = $self->_dbh_details->{_datatype_map_cache} ||= {};
+        if (not exists $cache->{$_->{sqlt_datatype}}) {
+          $cache->{$_->{sqlt_datatype}} = $self->bind_attribute_by_data_type($_->{sqlt_datatype}) || undef;
+        }
+        $cache->{$_->{sqlt_datatype}};
+      }
+      else {
+        undef;  # always push something at this position
+      }
+    }
+  }
 
-  : ! $_->{sqlt_datatype}   ? undef
-
-  :                           do {
-
-    # cache the result in the dbh_details hash, as it (usually) can not change
-    # unless we connect to something else
-    # FIXME: for the time being Oracle is an exception, pending a rewrite of
-    # the LOB storage
-    my $cache = $_[0]->_dbh_details->{_datatype_map_cache} ||= {};
-
-    $cache->{$_->{sqlt_datatype}} = $_[0]->bind_attribute_by_data_type($_->{sqlt_datatype})
-      if ! exists $cache->{$_->{sqlt_datatype}};
-
-    $cache->{$_->{sqlt_datatype}};
-
-  } } map { $_->[0] } @{$_[2]} ];
+  return \@attrs;
 }
 
 sub _execute {
@@ -2239,7 +2222,7 @@ sub _insert_bulk {
   # scope guard
   my $guard = $self->txn_scope_guard;
 
-  $self->_query_start( $sql, @$proto_bind ? [[ {} => '__BULK_INSERT__' ]] : () );
+  $self->_query_start( $sql, @$proto_bind ? [[undef => '__BULK_INSERT__' ]] : () );
   my $sth = $self->_prepare_sth($self->_dbh, $sql);
   my $rv = do {
     if (@$proto_bind) {
@@ -2253,7 +2236,7 @@ sub _insert_bulk {
     }
   };
 
-  $self->_query_end( $sql, @$proto_bind ? [[ {} => '__BULK_INSERT__' ]] : () );
+  $self->_query_end( $sql, @$proto_bind ? [[ undef => '__BULK_INSERT__' ]] : () );
 
   $guard->commit;
 
@@ -2603,9 +2586,9 @@ see L<DBIx::Class::SQLMaker::LimitDialects>.
 sub _dbh_columns_info_for {
   my ($self, $dbh, $table) = @_;
 
-  my %result;
-
-  if (! DBIx::Class::_ENV_::STRESSTEST_COLUMN_INFO_UNAWARE_STORAGE and $dbh->can('column_info')) {
+  if ($dbh->can('column_info')) {
+    my %result;
+    my $caught;
     try {
       my ($schema,$tab) = $table =~ /^(.+?)\.(.+)$/ ? ($1,$2) : (undef,$table);
       my $sth = $dbh->column_info( undef,$schema, $tab, '%' );
@@ -2622,75 +2605,39 @@ sub _dbh_columns_info_for {
         $result{$col_name} = \%column_info;
       }
     } catch {
-      %result = ();
+      $caught = 1;
     };
-
-    return \%result if keys %result;
+    return \%result if !$caught && scalar keys %result;
   }
 
+  my %result;
   my $sth = $dbh->prepare($self->sql_maker->select($table, undef, \'1 = 0'));
   $sth->execute;
+  my @columns = @{$sth->{NAME_lc}};
+  for my $i ( 0 .. $#columns ){
+    my %column_info;
+    $column_info{data_type} = $sth->{TYPE}->[$i];
+    $column_info{size} = $sth->{PRECISION}->[$i];
+    $column_info{is_nullable} = $sth->{NULLABLE}->[$i] ? 1 : 0;
 
-### The acrobatics with lc names is necessary to support both the legacy
-### API that used NAME_lc exclusively, *AND* at the same time work properly
-### with column names differing in cas eonly (thanks pg!)
-
-  my ($columns, $seen_lcs);
-
-  ++$seen_lcs->{lc($_)} and $columns->{$_} = {
-    idx => scalar keys %$columns,
-    name => $_,
-    lc_name => lc($_),
-  } for @{$sth->{NAME}};
-
-  $seen_lcs->{$_->{lc_name}} == 1
-    and
-  $_->{name} = $_->{lc_name}
-    for values %$columns;
-
-  for ( values %$columns ) {
-    my $inf = {
-      data_type => $sth->{TYPE}->[$_->{idx}],
-      size => $sth->{PRECISION}->[$_->{idx}],
-      is_nullable => $sth->{NULLABLE}->[$_->{idx}] ? 1 : 0,
-    };
-
-    if ($inf->{data_type} =~ m/^(.*?)\((.*?)\)$/) {
-      @{$inf}{qw( data_type  size)} = ($1, $2);
+    if ($column_info{data_type} =~ m/^(.*?)\((.*?)\)$/) {
+      $column_info{data_type} = $1;
+      $column_info{size}    = $2;
     }
 
-    $result{$_->{name}} = $inf;
+    $result{$columns[$i]} = \%column_info;
   }
-
   $sth->finish;
 
-  if ($dbh->can('type_info')) {
-    for my $inf (values %result) {
-      next if ! defined $inf->{data_type};
-
-      $inf->{data_type} = (
-        (
-          (
-            $dbh->type_info( $inf->{data_type} )
-              ||
-            next
-          )
-            ||
-          next
-        )->{TYPE_NAME}
-          ||
-        next
-      );
-
-      # FIXME - this may be an artifact of the DBD::Pg implmentation alone
-      # needs more testing in the future...
-      $inf->{size} -= 4 if (
-        ( $inf->{size}||0 > 4 )
-          and
-        $inf->{data_type} =~ qr/^text$/i
-      );
+  foreach my $col (keys %result) {
+    my $colinfo = $result{$col};
+    my $type_num = $colinfo->{data_type};
+    my $type_name;
+    if(defined $type_num && $dbh->can('type_info')) {
+      my $type_info = $dbh->type_info($type_num);
+      $type_name = $type_info->{TYPE_NAME} if $type_info;
+      $colinfo->{data_type} = $type_name if $type_name;
     }
-
   }
 
   return \%result;
@@ -2926,8 +2873,8 @@ sub create_ddl_dir {
     %{$sqltargs || {}}
   };
 
-  if (my $missing = DBIx::Class::Optional::Dependencies->req_missing_for ('deploy')) {
-    $self->throw_exception("Can't create a ddl file without $missing");
+  unless (DBIx::Class::Optional::Dependencies->req_ok_for ('deploy')) {
+    $self->throw_exception("Can't create a ddl file without " . DBIx::Class::Optional::Dependencies->req_missing_for ('deploy') );
   }
 
   my $sqlt = SQL::Translator->new( $sqltargs );
@@ -3083,8 +3030,8 @@ sub deployment_statements {
       return join('', @rows);
   }
 
-  if (my $missing = DBIx::Class::Optional::Dependencies->req_missing_for ('deploy') ) {
-    $self->throw_exception("Can't deploy without a pregenerated 'ddl_dir' directory or $missing");
+  unless (DBIx::Class::Optional::Dependencies->req_ok_for ('deploy') ) {
+    $self->throw_exception("Can't deploy without a ddl_dir or " . DBIx::Class::Optional::Dependencies->req_missing_for ('deploy') );
   }
 
   # sources needs to be a parser arg, but for simplicity allow at top level

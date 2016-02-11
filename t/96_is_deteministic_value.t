@@ -3,10 +3,15 @@ use warnings;
 
 use Test::More;
 use Test::Exception;
-use Math::BigInt;
 
 use lib qw(t/lib);
 use DBICTest;
+
+BEGIN {
+  require DBIx::Class;
+  plan skip_all => 'Test needs ' . DBIx::Class::Optional::Dependencies->req_missing_for ('test_dt')
+    unless DBIx::Class::Optional::Dependencies->req_ok_for ('test_dt');
+}
 
 my $schema = DBICTest->init_schema();
 my $artist_rs = $schema->resultset('Artist');
@@ -25,8 +30,9 @@ my $cd_rs = $schema->resultset('CD');
  }
 
  {
-   my $dt = Math::BigInt->new(2006);
-
+   my $formatter = DateTime::Format::Strptime->new(pattern => '%Y');
+   my $dt = DateTime->new(year => 2006, month => 06, day => 06,
+                          formatter => $formatter );
    my $cd;
    lives_ok {
      $cd = $cd_rs->search({ year => $dt})->create

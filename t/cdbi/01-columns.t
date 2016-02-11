@@ -1,5 +1,3 @@
-use DBIx::Class::Optional::Dependencies -skip_all_without => 'cdbicompat';
-
 use strict;
 use warnings;
 
@@ -99,8 +97,8 @@ ok(!State->find_column('HGLAGAGlAG'), '!find_column HGLAGAGlAG');
 }
 
 {
-  {
-    local $TODO = "No column objects";
+  SKIP: {
+    skip "No column objects", 1;
 
     eval { my @grps = State->__grouper->groups_for("Huh"); };
     ok $@, "Huh not in groups";

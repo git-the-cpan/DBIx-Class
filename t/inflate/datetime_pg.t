@@ -1,31 +1,22 @@
-use DBIx::Class::Optional::Dependencies -skip_all_without => qw( icdt icdt_pg );
-
 use strict;
 use warnings;
 
 use Test::More;
 use Test::Warn;
+use DBIx::Class::Optional::Dependencies ();
 use lib qw(t/lib);
 use DBICTest;
 
+plan skip_all => 'Test needs ' . DBIx::Class::Optional::Dependencies->req_missing_for ('test_dt_pg')
+  unless DBIx::Class::Optional::Dependencies->req_ok_for ('test_dt_pg');
+
 DBICTest::Schema->load_classes('EventTZPg');
 
-{
-  my $s = DBICTest::Schema->connect('dbi:Pg:whatever');
-
-  ok (!$s->storage->_dbh, 'definitely not connected');
-
-  # Check that datetime_parser returns correctly before we explicitly connect.
-  my $store = ref $s->storage;
-  is($store, 'DBIx::Class::Storage::DBI', 'Started with generic storage');
-
-  my $parser = $s->storage->datetime_parser;
-  is( $parser, 'DateTime::Format::Pg', 'datetime_parser is as expected');
-
-  ok (!$s->storage->_dbh, 'still not connected');
-}
-
 my $schema = DBICTest->init_schema();
+
+# this may generate warnings under certain CI flags, hence do it outside of
+# the warnings_are below
+my $dt = DateTime->new( year => 2000, time_zone => "America/Chicago" );
 
 warnings_are {
   my $event = $schema->resultset("EventTZPg")->find(1);

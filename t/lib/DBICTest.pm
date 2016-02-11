@@ -4,7 +4,7 @@ package # hide from PAUSE
 use strict;
 use warnings;
 
-use DBICTest::Util 'local_umask';
+use DBICTest::Util qw( local_umask await_flock dbg DEBUG_TEST_CONCURRENCY_LOCKS );
 use DBICTest::Schema;
 use DBICTest::Util::LeakTracer qw/populate_weakregistry assert_empty_weakregistry/;
 use DBIx::Class::_Util 'detected_reinvoked_destructor';
@@ -13,6 +13,7 @@ use Path::Class::File ();
 use File::Spec;
 use Fcntl qw/:DEFAULT :flock/;
 use Config;
+use Scope::Guard ();
 
 =head1 NAME
 
@@ -90,7 +91,14 @@ sub import {
 
     for my $exp (@_) {
         if ($exp eq ':GlobalLock') {
-            flock ($global_lock_fh, LOCK_EX) or die "Unable to lock $lockpath: $!";
+            DEBUG_TEST_CONCURRENCY_LOCKS > 1
+              and dbg "Waiting for EXCLUSIVE global lock...";
+
+            await_flock ($global_lock_fh, LOCK_EX) or die "Unable to lock $lockpath: $!";
+
+            DEBUG_TEST_CONCURRENCY_LOCKS > 1
+              and dbg "Got EXCLUSIVE global lock";
+
             $global_exclusive_lock = 1;
         }
         elsif ($exp eq ':DiffSQL') {
@@ -107,13 +115,22 @@ sub import {
     }
 
     unless ($global_exclusive_lock) {
-        flock ($global_lock_fh, LOCK_SH) or die "Unable to lock $lockpath: $!";
+        DEBUG_TEST_CONCURRENCY_LOCKS > 1
+          and dbg "Waiting for SHARED global lock...";
+
+        await_flock ($global_lock_fh, LOCK_SH) or die "Unable to lock $lockpath: $!";
+
+        DEBUG_TEST_CONCURRENCY_LOCKS > 1
+          and dbg "Got SHARED global lock";
     }
 }
 
 END {
+    # referencing here delays destruction even more
     if ($global_lock_fh) {
-        # delay destruction even more
+      DEBUG_TEST_CONCURRENCY_LOCKS > 1
+        and dbg "Release @{[ $global_exclusive_lock ? 'EXCLUSIVE' : 'SHARED' ]} global lock (END)";
+      1;
     }
 }
 
@@ -219,7 +236,7 @@ sub _database {
         # set a *DBI* disconnect callback, to make sure the physical SQLite
         # file is still there (i.e. the test does not attempt to delete
         # an open database, which fails on Win32)
-        if (! $storage->{master} and my $guard_cb = __mk_disconnect_guard($db_file)) {
+        if (my $guard_cb = __mk_disconnect_guard($db_file)) {
           $dbh->{Callbacks} = {
             connect => sub { $guard_cb->('connect') },
             disconnect => sub { $guard_cb->('disconnect') },
@@ -320,20 +337,10 @@ sub init_schema {
 
     my $schema;
 
-    if (
-      $ENV{DBICTEST_VIA_REPLICATED} &&=
-        ( !$args{storage_type} && !defined $args{sqlite_use_file} )
-    ) {
-      $args{storage_type} = ['::DBI::Replicated', { balancer_type => '::Random' }];
-      $args{sqlite_use_file} = 1;
-    }
-
-    my @dsn = $self->_database(%args);
-
     if ($args{compose_connection}) {
       $need_global_cleanup = 1;
       $schema = DBICTest::Schema->compose_connection(
-                  'DBICTest', @dsn
+                  'DBICTest', $self->_database(%args)
                 );
     } else {
       $schema = DBICTest::Schema->compose_namespace('DBICTest');
@@ -344,10 +351,7 @@ sub init_schema {
     }
 
     if ( !$args{no_connect} ) {
-      $schema->connection(@dsn);
-
-      $schema->storage->connect_replicants(\@dsn)
-        if $ENV{DBICTEST_VIA_REPLICATED};
+      $schema = $schema->connect($self->_database(%args));
     }
 
     if ( !$args{no_deploy} ) {
@@ -363,10 +367,7 @@ sub init_schema {
 }
 
 END {
-  # Make sure we run after any cleanup in other END blocks
-  push @{ B::end_av()->object_2svref }, sub {
     assert_empty_weakregistry($weak_registry, 'quiet');
-  };
 }
 
 =head2 deploy_schema
@@ -386,8 +387,11 @@ sub deploy_schema {
     my $schema = shift;
     my $args = shift || {};
 
-    local $schema->storage->{debug}
-      if ($ENV{TRAVIS}||'') eq 'true';
+    my $guard;
+    if ( ($ENV{TRAVIS}||'') eq 'true' and my $old_dbg = $schema->storage->debug ) {
+      $guard = Scope::Guard->new(sub { $schema->storage->debug($old_dbg) });
+      $schema->storage->debug(0);
+    }
 
     if ($ENV{"DBICTEST_SQLT_DEPLOY"}) {
         $schema->deploy($args);
@@ -417,8 +421,11 @@ sub populate_schema {
     my $self = shift;
     my $schema = shift;
 
-    local $schema->storage->{debug}
-      if ($ENV{TRAVIS}||'') eq 'true';
+    my $guard;
+    if ( ($ENV{TRAVIS}||'') eq 'true' and my $old_dbg = $schema->storage->debug ) {
+      $guard = Scope::Guard->new(sub { $schema->storage->debug($old_dbg) });
+      $schema->storage->debug(0);
+    }
 
     $schema->populate('Genre', [
       [qw/genreid name/],

@@ -16,7 +16,7 @@ configure_requires:
   ExtUtils::MakeMaker: 6.59
 distribution_type: module
 dynamic_config: 0
-generated_by: 'Module::Install version 1.06'
+generated_by: 'Module::Install version 1.16'
 license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -68,7 +68,7 @@ resources:
   homepage: http://www.dbix-class.org/
   license: http://dev.perl.org/licenses/
   repository: https://github.com/dbsrgits/DBIx-Class
-version: 0.082899_14
+version: 0.082820_01
 x_authority: cpan:RIBASUSHI
 x_contributors:
   - 'abraxxa: Alexander Hartmaier <abraxxa@cpan.org>'
@@ -169,7 +169,6 @@ x_contributors:
   - 'kentnl: Kent Fredric <kentnl@cpan.org>'
   - 'kkane: Kevin L. Kane <kevin.kane@gmail.com>'
   - 'konobi: Scott McWhirter <konobi@cpan.org>'
-  - 'Lasse Makholm <lasse@unity3d.com>'
   - 'lejeunerenard: Sean Zellmer <sean@lejeunerenard.com>'
   - 'littlesavage: Alexey Illarionov <littlesavage@orionet.ru>'
   - 'lukes: Luke Saunders <luke.saunders@gmail.com>'

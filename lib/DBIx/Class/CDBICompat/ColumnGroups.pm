@@ -4,6 +4,7 @@ package # hide from PAUSE
 use strict;
 use warnings;
 use Sub::Name ();
+use Storable 'dclone';
 use List::Util ();
 
 use base qw/DBIx::Class::Row/;
@@ -42,7 +43,7 @@ sub _register_column_group {
 
   # Must do a complete deep copy else column groups
   # might accidentally be shared.
-  my $groups = DBIx::Class::_Util::deep_clone( $class->_column_groups );
+  my $groups = dclone $class->_column_groups;
 
   if ($group eq 'Primary') {
     $class->set_primary_key(@cols);
