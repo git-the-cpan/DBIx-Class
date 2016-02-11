@@ -68,7 +68,7 @@ resources:
   homepage: http://www.dbix-class.org/
   license: http://dev.perl.org/licenses/
   repository: https://github.com/dbsrgits/DBIx-Class
-version: 0.082820_01
+version: 0.082821
 x_authority: cpan:RIBASUSHI
 x_contributors:
   - 'abraxxa: Alexander Hartmaier <abraxxa@cpan.org>'
@@ -275,3 +275,5 @@ x_contributors:
   - 'yrlnry: Mark Jason Dominus <mjd@plover.com>'
   - 'zamolxes: Bogdan Lucaciu <bogdan@wiz.ro>'
   - 'Zefram: Andrew Main <zefram@fysh.org>'
+x_dependencies_parallel_test_certified: 1
+x_parallel_test_certified: 1

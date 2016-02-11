@@ -609,7 +609,6 @@ t/resultset/is_paged.t
 t/resultset/nulls_only.t
 t/resultset/plus_select.t
 t/resultset/rowparser_internals.t
-t/resultset/slice.t
 t/resultset/update_delete.t
 t/resultset_class.t
 t/resultset_overload.t
